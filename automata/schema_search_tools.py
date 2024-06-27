@@ -71,15 +71,19 @@ def check_for_duplicates(nodes, iterations=10000):
     print(f"Unique rules generated:{len(set(rules))}")
 
 
-def annihilation_generation_rules(output_list):
+def annihilation_generation_rules(
+    output_list, only_annihilation=False, only_generation=False
+):
     """
     This function takes in a list of outputs from an automata and returns a dataframe with the rules that are annihilation and generation rules.
 
     Args:
     output_list: list of outputs from an automata
+    only_annihilation: boolean, if True, only annihilation rules are returned
+    only_generation: boolean, if True, only generation rules are returned
 
     Returns:
-    annihilation_generation_rules: dataframe with the rules that are annihilation and generation rules.
+    rules: list of rules that are annihilation and generation rules
 
     Method:
     Using BooleanNode from CANA, it creates a look-up-table from a list of outputs.
@@ -93,39 +97,52 @@ def annihilation_generation_rules(output_list):
     )  # creating a node from the output list
     lut = node.look_up_table()
 
-    annihilation_outputs_lut = (  # generates an LUT which is RULE & (NOT X_4), where X_4 is the middle input. the result is 1 for all the rules that annihilate and 0 for all the others.
-        ((lut["Out:"] == "0") & (lut["In:"].str[3] == "1"))
-        .apply(lambda x: "1" if x else "0")
-        .tolist()
-    )
-    annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
-    temp = annihilation.schemata_look_up_table()  # generating a new schemata from the new LUT to identify the rules that are annihilation
-    annihilation_rules = temp[
-        temp["Output"] == 1
-    ]  # filtering the rules that are annihilation
-    annihilation_rules.loc[:, "Output"] = (
-        0  # reassigning the output to 0 since it is an annihilation rule
-    )
+    if only_annihilation and only_generation:
+        raise ValueError(
+            "Both only_annihilation and only_generation cannot be True at the same time."
+        )
 
-    generation_outputs = (  # generates an LUT which is NOT RULE & (X_4), where X_4 is the middle input. the result is 1 for all the rules that generate and 0 for all the others.
-        ((lut["Out:"] == "1") & (lut["In:"].str[3] == "0"))
-        .apply(lambda x: "1" if x else "0")
-        .tolist()
-    )
-    generation = BooleanNode.from_output_list(generation_outputs)
+    if only_generation is False:
+        annihilation_outputs_lut = (  # generates an LUT which is RULE & (NOT X_4), where X_4 is the middle input. the result is 1 for all the rules that annihilate and 0 for all the others.
+            ((lut["Out:"] == "0") & (lut["In:"].str[3] == "1"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+        annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
+        temp = annihilation.schemata_look_up_table()  # generating a new schemata from the new LUT to identify the rules that are annihilation
+        annihilation_rules = temp[
+            temp["Output"] == 1
+        ]  # filtering the rules that are annihilation
+        annihilation_rules.loc[:, "Output"] = (
+            0  # reassigning the output to 0 since it is an annihilation rule
+        )
 
-    temp = generation.schemata_look_up_table()  # generating a new schemata from the new LUT to identify the rules that are generation
-    generation_rules = temp[
-        temp["Output"] == 1
-    ]  # filtering the rules that are generation
-    generation_rules.loc[:, "Output"] = (
-        1  # reassigning the output to 1 since it is a generation rule
-    )
+    if only_annihilation is False:
+        generation_outputs = (  # generates an LUT which is NOT RULE & (X_4), where X_4 is the middle input. the result is 1 for all the rules that generate and 0 for all the others.
+            ((lut["Out:"] == "1") & (lut["In:"].str[3] == "0"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+        generation = BooleanNode.from_output_list(generation_outputs)
 
-    # combining the two dataframes to get the final dataframe
-    annihilation_generation_rules = pd.concat([annihilation_rules, generation_rules])
+        temp = generation.schemata_look_up_table()  # generating a new schemata from the new LUT to identify the rules that are generation
+        generation_rules = temp[
+            temp["Output"] == 1
+        ]  # filtering the rules that are generation
+        generation_rules.loc[:, "Output"] = (
+            1  # reassigning the output to 1 since it is a generation rule
+        )
+
+    if only_annihilation:
+        rules = annihilation_rules
+
+    elif only_generation:
+        rules = generation_rules
+
+    else:  # combining the two dataframes to get the final dataframe
+        rules = pd.concat([annihilation_rules, generation_rules])
 
     # converting it into a list
-    annihilation_generation_rules = annihilation_generation_rules.values.tolist()
+    rules = rules.values.tolist()
 
-    return annihilation_generation_rules
+    return rules

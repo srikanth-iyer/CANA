@@ -428,7 +428,13 @@ autoschemata = {
 }
 
 # annihilation and generation rules in automata
-incomplete_automata = {  # keeping annihilation and generation rules only
+'''
+used jordan's algorithm and verified with the annihilation generation rules shown in [1].
+
+[1] M. Marques, R. Manurung, and H. Pain, “Conceptual Representations: What do they have to say about the Density Classiﬁcation Task by Cellular Automata?”.
+'''
+
+annihilation_generation = {  # keeping annihilation and generation rules only (DONE MANUALLY)
     "GKL": [
         # ["0##0###", 0],
         # ["##0#0#0", 0],

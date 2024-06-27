@@ -1094,11 +1094,19 @@ class BooleanNode(object):
                 Generate n unique permutations of elements.
                 """
                 seen = set()
-                # elements = list(elements)  # Ensure we can shuffle
-                # random.shuffle(elements)  # Shuffle to ensure randomness in subsets
-                for perm in permutations(elements):
-                    perm = list(perm)
-                    random.shuffle(perm)  # Shuffle to ensure randomness in subsets
+
+                # for perm in permutations(elements):
+                #     perm = list(perm)
+                #     random.shuffle(perm)  # Shuffle to ensure randomness in subsets
+                #     perm_as_str = str(perm)  # Convert to string for hashability
+                #     if perm_as_str not in seen:
+                #         seen.add(perm_as_str)
+                #         yield perm
+                #         if len(seen) == n:
+                #             return
+                while len(seen) < n:
+                    perm = elements.copy()
+                    random.shuffle(perm)
                     perm_as_str = str(perm)  # Convert to string for hashability
                     if perm_as_str not in seen:
                         seen.add(perm_as_str)

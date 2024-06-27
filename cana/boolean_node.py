@@ -1002,7 +1002,6 @@ class BooleanNode(object):
     def generate_with_required_bias(
         self,
         required_node_bias=None,
-        # limit=1000,
         verbose=False,
         *args,
         **kwargs,
@@ -1013,7 +1012,6 @@ class BooleanNode(object):
 
         Args:
             required_node_bias (float) : The required node bias to fill the missing output values with.
-            limit (int) : The maximum number of permutations to generate. If the total number of permutations is greater than the limit, then a random subset of the permutations is generated.
             verbose (bool) : If True, print additional information.
 
         Returns:
@@ -1083,27 +1081,12 @@ class BooleanNode(object):
 
             combinationsnumber = comb(number_of_missing_values, ones_to_be_generated)
 
-            # if combinationsnumber > limit:
-            #     warnings.warn(
-            #         f"Total possible permutaions = {combinationsnumber}. Selecting {limit} permutations randomly."
-            #     )
-            # create a list of all possible unique arrangements of the missing output values
-            # combinations = list(islice(set(permutations(missing_output_values)), limit))
             def unique_permutations_missing_values(elements, n):
                 """
                 Generate n unique permutations of elements.
                 """
                 seen = set()
 
-                # for perm in permutations(elements):
-                #     perm = list(perm)
-                #     random.shuffle(perm)  # Shuffle to ensure randomness in subsets
-                #     perm_as_str = str(perm)  # Convert to string for hashability
-                #     if perm_as_str not in seen:
-                #         seen.add(perm_as_str)
-                #         yield perm
-                #         if len(seen) == n:
-                #             return
                 while len(seen) < n:
                     perm = elements.copy()
                     random.shuffle(perm)
@@ -1120,6 +1103,10 @@ class BooleanNode(object):
             generated_node_permutations = []
 
             def node_permutations(combinations, node_outputs, *args, **kwargs):
+                """
+                Applying the generated combinations to the missing output values and generating the BooleanNode objects.
+                """ 
+
                 for combination in combinations:
                     combination = list(combination)
                     generated_outputs = node_outputs.copy()
@@ -1146,7 +1133,7 @@ class BooleanNode(object):
                     print(
                         f"{combinationsnumber:.2e} possible permutation(s) with a bias of {output_bias_for_print}. This is the closest bias less than or equal to the required bias of {bias}."
                     )
-            return generated_node_permutations  # returning a list of BooleanNode objects with the required bias.
+            return generated_node_permutations  # returning a generator of BooleanNode objects with the required bias.
 
     def generate_with_required_effective_connectivity(
         self,

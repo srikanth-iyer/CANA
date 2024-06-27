@@ -15,7 +15,7 @@ Main class for Boolean node objects.
 #   MIT license.
 from __future__ import division
 
-from itertools import combinations, compress, product, permutations
+from itertools import combinations, compress, product
 from statistics import mean
 
 import networkx as nx

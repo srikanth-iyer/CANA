@@ -835,7 +835,7 @@ class BooleanNode(object):
             raise Exception("Canalization variable name not found. %s" % kwargs)
         return True
 
-    def bias(self, verbose=True):
+    def bias(self, verbose=False):
         r"""The node bias. The sum of the boolean output transitions divided by the number of entries (:math:`2^k`) in the LUT.
 
         .. math::
@@ -850,8 +850,8 @@ class BooleanNode(object):
         """
         if verbose:
             if "?" in self.outputs:
-                print(
-                    "Warning: There is a '?' value in the output. It will be treated as zero for the bias calculation."
+                warnings.warn(
+                    "There is a '?' value in the output. It will be treated as zero for the bias calculation."
                 )
 
         outputs = [
@@ -984,7 +984,7 @@ class BooleanNode(object):
 
         # Fill missing output values with the specified bias or with specified effective connectivity or randomly
 
-        if fill_missing_output_randomly: # TODO : [SRI] should this also return a list like the others? 
+        if fill_missing_output_randomly: 
             # Replace '?' in generated_node.outputs with 0 or 1 randomly
             generated_node.outputs = [
                 random.choice(["0", "1"]) if output == "?" else output

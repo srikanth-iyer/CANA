@@ -5,7 +5,14 @@ import pandas as pd
 
 
 def concatenate(outputlist):
-    """Mostly for converting output lists into one string for easy comparison with other strings."""
+    """
+    Mostly for converting output lists into one string for easy comparison with other strings.
+    
+    Example:
+    outputlist = ['0', '1', '0', '1', '1', '0', '1', '0']
+    concatenate(outputlist)
+    '01011010'
+    """
     return "".join(outputlist)
 
 
@@ -30,6 +37,8 @@ def check_spread_randomness(nodes, iterations=10000):
     - If the values are close to 1, then the rules are not spread randomly.
     - Numbers that are abs(1) are fixed values.
 
+    Example:
+    check_spread_randomness(nodes, iterations=10000)
     """
 
     rules = []

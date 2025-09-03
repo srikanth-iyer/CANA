@@ -3,6 +3,15 @@ CANAlization: Control & Redundancy in Boolean Networks
 
 This package implements a series of methods used to study control, canalization and redundancy in Boolean Networks.
 
+Citation:
+-------------
+
+If you use `cana` in your research, please cite us and check out our related papers below! 
+
+- A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
+
+
+
 Installation:
 -------------
 
@@ -33,6 +42,8 @@ The full documentation can be found at: [casci-lab.github.io/CANA/](https://casc
 
 Papers:
 ---------
+
+- A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
 
 - A.J. Gates, R.B. Correia, X. Wang, L.M. Rocha [2021]. "[The effective graph reveals redundancy, canalization, and control pathways in biochemical regulation and signaling](https://doi.org/10.1073/pnas.2022598118)". *Proceedings of the National Academy of Sciences (PNAS)*. 118(**12**). doi: 10.1073/pnas.20225981186
 

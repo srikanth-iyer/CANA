@@ -96,5 +96,5 @@ ENV/
 # Rope project settings
 .ropeproject
 
-# private workbench
+# TEMP files
 temp_*

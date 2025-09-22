@@ -339,14 +339,18 @@ def plot_anni_gen_schemata(n, plotTS=True):
 
     # get annihilation and generation nodes and their ts and pi
     lut = n.look_up_table()
-    annihilation_outputs_lut = (  # generates an LUT which is RULE & (NOT X_4), where X_4 is the middle input. the result is 1 for all the rules that annihilate and 0 for all the others.
-        ((lut["Out:"] == "0") & (lut["In:"].str[3] == "1"))
+    # pick middle input index dynamically for any k
+    mid_idx = k // 2
+    annihilation_outputs_lut = (
+        # RULE & (NOT X_mid): result is 1 for rules that annihilate
+        ((lut["Out:"] == "0") & (lut["In:"].str[mid_idx] == "1"))
         .apply(lambda x: "1" if x else "0")
         .tolist()
     )
     annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
-    generation_outputs = (  # generates an LUT which is NOT RULE & (X_4), where X_4 is the middle input. the result is 1 for all the rules that generate and 0 for all the others.
-        ((lut["Out:"] == "1") & (lut["In:"].str[3] == "0"))
+    generation_outputs = (
+        # (NOT RULE) & (X_mid): result is 1 for rules that generate
+        ((lut["Out:"] == "1") & (lut["In:"].str[mid_idx] == "0"))
         .apply(lambda x: "1" if x else "0")
         .tolist()
     )
@@ -408,6 +412,8 @@ def plot_anni_gen_schemata(n, plotTS=True):
     yticks = []
     patches = []
     x, y = 0.0, 0.0
+    # ensure xticks exists even if there are no PI schemata
+    xticks = []
 
     for out, pis in zip([1, 0], [pigs, pias]):
         for pi in pis:
@@ -492,6 +498,10 @@ def plot_anni_gen_schemata(n, plotTS=True):
     ax1.set_yticklabels(
         [r"$f^{'}_{%d}$" % (i + 1) for i in range(n_pi)[::-1]], fontsize=14
     )
+    # default xticks when no schemata drawn
+    if not xticks:
+        xticks = [i * (cwidth + cxspace) + (cwidth / 2) for i in range(k)]
+        xticks.append(k * (cwidth + cxspace) + sepcxspace + (cwidth / 2))
     ax1.set_xticks(xticks)
     ax1.set_xticklabels(inputlabels + ["%s" % (n.name)], rotation=90, fontsize=14)
     #
@@ -520,6 +530,8 @@ def plot_anni_gen_schemata(n, plotTS=True):
     x, y = 0.0, 0.0
     yticks = []
     boxes, symbols = [], []
+    # ensure xticks exists even if there are no TS schemata
+    xticks = []
     #
     tssymbols = [
         Circle((0, 0), radius=5, facecolor="white", edgecolor="black"),
@@ -635,6 +647,10 @@ def plot_anni_gen_schemata(n, plotTS=True):
     ax2.set_yticklabels(
         [r"$f^{''}_{%d}$" % (i + 1) for i in range(n_ts)[::-1]], fontsize=14
     )
+    # default xticks when no schemata drawn
+    if not xticks:
+        xticks = [i * (cwidth + cxspace) + (cwidth / 2) for i in range(k)]
+        xticks.append(k * (cwidth + cxspace) + sepcxspace + (cwidth / 2))
     ax2.set_xticks(xticks)
     ax2.set_xticklabels(inputlabels + ["%s" % (n.name)], rotation=90, fontsize=14)
     #

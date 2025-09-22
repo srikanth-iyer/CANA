@@ -81,9 +81,10 @@ def plot_look_up_table(n):
             x += cwidth + cxspace
 
         x += sepcxspace
-        r = Rectangle((x,y), width=cwidth, height=cwidth, facecolor='black' if (out==1) else 'white', edgecolor='black')
+        is_one = (out == 1) or (out == '1')
+        r = Rectangle((x,y), width=cwidth, height=cwidth, facecolor='black' if is_one else 'white', edgecolor='black')
         ax1.add_artist(Text(x-(sepcxspace/2)-(cxspace/2),y+cwidth/10*4, text=':', color='black', va='center', ha='center',fontsize=14,weight='bold',family='serif'))
-        ax1.add_artist(Text(x+(cwidth/2),y+cwidth/10*4, text=out, color='white' if (out==1) else 'black', va='center', ha='center',fontsize=14,family='serif'))
+        ax1.add_artist(Text(x+(cwidth/2),y+cwidth/10*4, text=str(out), color='white' if is_one else 'black', va='center', ha='center',fontsize=14,family='serif'))
         patches.append(r)
         xticks.append(x+cwidth/2)
         yticks.append(y+cwidth/2)

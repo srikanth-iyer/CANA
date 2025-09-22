@@ -126,7 +126,7 @@ def plot_look_up_table(n):
     
     plt.close()
 
-def annigen_look_up_table(n):
+def plot_annigen_look_up_table(n):
     """
     Plot annihilation and generation Look-Up Tables side by side.
 

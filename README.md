@@ -108,7 +108,9 @@ Pull requests are welcome :) Please get in touch with one us beforehand: `rionbr
 Tests
 -----
 
-Run nosetests -v to perform tests and diagnoses on functions.
+Before running the test suite, install the project dependencies with `pip install -r requirements.txt` (ideally inside a virtual environment).
+
+Run `pytest -q` to execute the automated tests and verify functionality.
 
 
 Changelog

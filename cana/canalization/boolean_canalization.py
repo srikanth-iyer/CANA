@@ -5,6 +5,11 @@ Boolean Canalization
 
 Functions to compute the Quine-McCluskey algorithm.
 
+This module provides both pure Python and Cython-based implementations for
+canalization analysis. The Cython version (`cboolean_canalization`) is
+recommended for performance-critical applications, while the pure Python
+version is provided for reference and educational purposes.
+
 """
 #   Copyright (C) 2021 by
 #   Rion Brattig Correia <rionbr@gmail.com>
@@ -61,83 +66,6 @@ def make_transition_density_tables(k=1, outputs=[0, 1]):
             transition_density_tuple[transition][density].append(binstate)
     #
     return transition_density_tuple
-
-
-def find_implicants_qmOLD(column, verbose=False):
-    """Finds the prime implicants (PI) using the Quine-McCluskey algorithm :cite:`Quine:1955`.
-
-    Args:
-        column (list) : A list-of-lists containing the counts of ``1`` for each input.
-            This is given by `make_transition_density_tables`.
-
-    Returns:
-        PI (set): a set of prime implicants.
-
-    # Authors: Alex Gates and Etienne Nzabarushimana
-    """
-
-    N = len(column) - 1
-
-    # we start with an empty set of implicants
-    prime_implicants = set()
-    done = False
-
-    # repeat the following until no matches are found
-    while not done:
-        done = True
-
-        # default everything to empty with no matches
-        next_column = [set() for _ in range(N + 1)]
-        matches = [
-            [False for _ in range(len(column[density]))] for density in range(N + 1)
-        ]
-
-        # loop through the possible densities
-        for density in range(N):
-            # compare the implicants from successive densities
-            for i, implicant in enumerate(column[density]):
-                for j, candidate in enumerate(column[density + 1]):
-                    # check if the implicants differ on only one variable
-                    match = _adjacent(implicant, candidate)
-                    if match:
-                        matches[density][i] = matches[density + 1][j] = True
-                        matches_density = sum([var != "0" for var in match])
-                        next_column[matches_density].add(match)
-                        done = False
-
-        # now add back the implicants that were not matched
-        for i in range(N + 1):
-            for j in range(len(matches[i])):
-                if not matches[i][j]:
-                    prime_implicants.add(column[i][j])
-
-        # use the simplified table as the starting point of the next pass
-        column = [list(g) for g in next_column]
-
-    return prime_implicants
-
-
-def _adjacent(imp1, imp2):
-    """Determine if two implicants are adjacent: ie differ on only one variable.
-
-    Args:
-        imp1 (string): implicant 1
-        imp1 (string): implicant 2
-
-    Returns:
-        (bool)
-    """
-    differences = 0
-    match = []
-    for m1, m2 in zip(imp1, imp2):
-        if m1 == m2:
-            match.append(m1)
-        elif differences:
-            return False
-        else:
-            differences += 1
-            match.append("2")
-    return "".join(match)
 
 
 def __pi_covers(implicant, input, symbol=["2", "#", 2]):

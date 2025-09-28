@@ -53,54 +53,67 @@ from cana.utils import entropy, flip_binstate_bit_set, output_transitions
 
 
 class BooleanNetwork:
-    """ """
+    """A class for representing and analyzing Boolean Networks.
+
+    This class provides a comprehensive suite of tools for studying the structure
+    and dynamics of Boolean Networks. It supports various input formats,
+    including .cnet and logical expressions, and offers methods for:
+
+    - Structural analysis (e.g., structural graphs, degree distributions).
+    - Dynamical analysis (e.g., state transition graphs, attractors, basins).
+    - Canalization and redundancy quantification.
+    - Network control (e.g., FVS, MDS, structural controllability).
+
+    Attributes:
+        name (str): The name of the network.
+        Nnodes (int): The number of nodes in the network.
+        logic (dict): A dictionary describing the update logic for each node.
+        nodes (list): A list of `BooleanNode` objects representing the nodes.
+    """
 
     def __init__(
         self,
         name="",
         Nnodes=0,
         logic=None,
-        sg=None,
-        stg=None,
-        stg_r=None,
-        _eg=None,
-        attractors=None,
         constants=None,
-        Nconstants=None,
         keep_constants=False,
-        bin2num=None,
-        num2bin=None,
-        verbose=False,  # Verbose mode for debugging purposes
-        *args,
-        **kwargs,
+        verbose=False,
     ):
-        # NOTE: *args and **kwargs don't do anything. I'm not sure why they wre added here, so I'm not going to remove them.
+        """Initializes a BooleanNetwork instance.
 
-        self.name = name  # Name of the Network
-        self.Nnodes = Nnodes  # Number of Nodes
-        self.logic = logic  # A dict that contains the network logic {<id>:{'name':<string>,'in':<list-input-node-id>,'out':<list-output-transitions>},..}
-        self._sg = sg  # Structure-Graph (SG)
-        self._stg = stg  # State-Transition-Graph (STG)
-        self._stg_r = stg_r  # State-Transition-Graph Reachability dict (STG-R)
-        self._eg = _eg  # Effective Graph, computed from the effective connectivity
-        self._attractors = attractors  # Network Attractors
+        Args:
+            name (str, optional): The name of the network. Defaults to "".
+            Nnodes (int, optional): The number of nodes. Defaults to 0.
+            logic (dict, optional): The network's logic dictionary.
+            constants (dict, optional): A dictionary of constant nodes.
+            keep_constants (bool, optional): If True, constant nodes are
+                preserved in certain calculations. Defaults to False.
+            verbose (bool, optional): If True, enables verbose output for
+                debugging. Defaults to False.
+        """
+
+        self.name = name
+        self.Nnodes = Nnodes
+        self.logic = logic
+        self._sg = None  # Structure-Graph (SG)
+        self._stg = None  # State-Transition-Graph (STG)
+        self._stg_r = None  # State-Transition-Graph Reachability dict (STG-R)
+        self._eg = None  # Effective Graph, computed from the effective connectivity
+        self._attractors = None  # Network Attractors
         #
-        self.keep_constants = (
-            keep_constants  # Keep/Include constants in some of the computations
-        )
+        self.keep_constants = keep_constants
         if constants is None:
             self.constants = {}
         else:
-            self.constants = (
-                constants  # Keep/Include constants in some of the computations
-            )
+            self.constants = constants
 
-        self.Nstates = 2**Nnodes  # Number of possible states in the network 2^N
+        self.Nstates = 2**Nnodes
 
         #
         self.verbose = verbose
 
-        # Intanciate BooleanNodes
+        # Instantiate BooleanNodes
         self.name2int = {logic[i]["name"]: i for i in range(Nnodes)}
         self.Nself_loops = sum(
             [self.name2int[logic[i]["name"]] in logic[i]["in"] for i in range(Nnodes)]
@@ -117,12 +130,9 @@ class BooleanNetwork:
             )
             self.nodes.append(node)
 
-        if Nconstants is None:
-            self.Nconstants = sum(
-                [n.constant for n in self.nodes]
-            )  # Number of constant variables
-        else:
-            self.Nconstants = Nconstants
+        self.Nconstants = sum(
+            [n.constant for n in self.nodes]
+        )  # Number of constant variables
 
         self.input_nodes = [
             i
@@ -133,8 +143,8 @@ class BooleanNetwork:
             )
         ]
         #
-        self.bin2num = bin2num  # Helper function. Converts binstate to statenum. It gets updated by `_update_trans_func`
-        self.num2bin = num2bin  # Helper function. Converts statenum to binstate. It gets updated by `_update_trans_func`
+        self.bin2num = None  # Helper function. Converts binstate to statenum. It gets updated by `_update_trans_func`
+        self.num2bin = None  # Helper function. Converts statenum to binstate. It gets updated by `_update_trans_func`
         self._update_trans_func()  # Updates helper functions and other variables
 
     def __str__(self):

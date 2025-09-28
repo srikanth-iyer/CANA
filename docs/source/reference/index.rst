@@ -12,9 +12,10 @@ API Reference
 	:maxdepth: 2
 	
 	node
-	network
-	canalization/index
-	control/index
-	datasets/index
-	ensemble
-	utils
+        network
+        canalization/index
+        control/index
+        datasets/index
+        ensemble
+        drawing
+        utils

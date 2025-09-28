@@ -1,135 +1,85 @@
 CANAlization: Control & Redundancy in Boolean Networks
 =======================================================
 
-This package implements a series of methods used to study control, canalization and redundancy in Boolean Networks.
+This package implements a series of methods used to study control, canalization, and redundancy in Boolean Networks.
 
-Citation:
--------------
+[![PyPI version](https://badge.fury.io/py/cana.svg)](https://badge.fury.io/py/cana)
+[![Downloads](https://pepy.tech/badge/cana)](https://pepy.tech/project/cana)
 
-If you use `cana` in your research, please cite us and check out our related papers below! 
+## Citation
 
-- A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
-
-
-
-Installation:
--------------
-
-** Latest stable release **
-
-- from PYPI
-```
-    pip install cana
-```
-
-** Latest development release on GitHub **
-
-Pull and install the code directly from the github [project page](https://github.com/casci-lab/CANA).
-
-```
-    pip install git+https://github.com/CASCI-lab/CANA
-```
-
-Please note that CANA uses Cython. For it to compile you may need to install the following:
-
-- `pip install Cython`
-
-Docs:
--------
-
-The full documentation can be found at: [casci-lab.github.io/CANA/](https://casci-lab.github.io/CANA/)
-
-
-Papers:
----------
+If you use `cana` in your research, please cite us and check out our related papers below!
 
 - A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
 
-- A.J. Gates, R.B. Correia, X. Wang, L.M. Rocha [2021]. "[The effective graph reveals redundancy, canalization, and control pathways in biochemical regulation and signaling](https://doi.org/10.1073/pnas.2022598118)". *Proceedings of the National Academy of Sciences (PNAS)*. 118(**12**). doi: 10.1073/pnas.20225981186
+## Installation
 
-- R.B. Correia, A.J. Gates, X. Wang, L.M. Rocha [2018]. "[CANA: A python package for quantifying control and canalization in Boolean Networks](https://www.informatics.indiana.edu/rocha/publications/FSB18.php)". *Frontiers in Physiology*. **9**: 1046. doi: 10.3389/fphys.2018.01046
+**Stable Release (from PyPI)**
+```bash
+pip install cana
+```
 
-- A. Gates and L.M. Rocha. [2016] "[Control of complex networks requires both structure and dynamics.](http://www.informatics.indiana.edu/rocha/publications/NSR16.php)" *Scientific Reports* **6**, 24456. doi: 10.1038/srep24456.
+**Development Release (from GitHub)**
+```bash
+pip install git+https://github.com/CASCI-lab/CANA
+```
 
-- A. Gates and L.M. Rocha [2014]. "[Structure and dynamics affect the controllability of complex systems: a Preliminary Study](http://www.informatics.indiana.edu/rocha/publications/alife14a.html)". *Artificial Life 14: Proceedings of the Fourteenth International Conference on the Synthesis and Simulation of Living Systems*: 429-430, MIT Press.
+## Quick Start
 
-- M. Marques-Pita and L.M. Rocha [2013]. "[Canalization and control in automata networks: body segmentation in Drosophila Melanogaster](http://informatics.indiana.edu/rocha/publications/plos2012.html)". *PLoS ONE*, **8**(3): e55946. doi:10.1371/journal.pone.0055946.
+Here's a quick example of how to create a `BooleanNetwork`, find its attractors, and compute its Dynamics Canalization Map (DCM).
 
+```python
+from cana.boolean_network import BooleanNetwork
 
-Credits:
----------
+# Define a simple 3-node network
+logic = {
+    0: {'name': 'A', 'in': [1, 2], 'out': [0, 1, 1, 0]},
+    1: {'name': 'B', 'in': [0], 'out': [1, 0]},
+    2: {'name': 'C', 'in': [0, 1], 'out': [0, 0, 1, 1]}
+}
 
-``CANA`` was originally written by Rion Brattig Correia and Alexander Gates, and has been developed
-with the help of many others. Thanks to everyone who has improved ``CANA`` by contributing code, bug reports (and fixes), documentation, and input on design, and features.
+# Create the BooleanNetwork object
+bn = BooleanNetwork.from_dict(logic, name='My Simple Network')
 
+# Find attractors using the State Transition Graph (STG)
+attractors = bn.attractors(mode='stg')
+print(f'Attractors: {attractors}')
 
-**Original Authors**
+# Compute the Dynamics Canalization Map (DCM)
+dcm = bn.dynamics_canalization_map()
+print(f'DCM: {dcm}')
+```
 
-- [Rion Brattig Correia](http://alexandergates.net/), github: [rionbr](https://github.com/rionbr)
-- [Alexander Gates](https://alexandergates.net/), github: [ajgates42](https://github.com/ajgates42)
+## Documentation
 
+The full documentation, including detailed tutorials and API references, can be found at: [casci-lab.github.io/CANA/](https://casci-lab.github.io/CANA/)
 
-**Contributors**
+## Development
 
-Optionally, add your desired name and include a few relevant links. The order
-is an attempt at historical ordering.
+`CANA` uses `Cython` to accelerate some of its computations. If you are contributing to the project and need to modify the `.pyx` files, you will need to have `Cython` installed in your development environment.
 
-- [Xuan Wang](https://www.wangxuan.name), github: [xuan-w](https://github.com/xuan-w)
-- Thomas Parmer, github: [tjparmer](https://github.com/tjparmer)
-- Etienne Nzabarushimana
-- Luis M. Rocha
+**Setting up a development environment:**
+```bash
+# Clone the repository
+git clone https://github.com/CASCI-lab/CANA.git
+cd CANA
 
+# Install in editable mode with development dependencies
+pip install -e .
+```
 
-Support
--------
+The `setup.py` file is configured to automatically detect if `Cython` is available and will compile the `.pyx` files accordingly. If you modify any `.pyx` files, they will be re-compiled the next time you run the installation command.
 
-Those who have contributed to ``CANA`` have received support throughout the years from a variety of sources.  We list them below.
-If you have provided support to ``CANA`` and a support acknowledgment does not appear below, please help us remedy the situation, and similarly, please let us know if you'd like something modified or corrected.
+**Running Tests:**
+To run the test suite, use `pytest`:
+```bash
+pytest
+```
 
-**Research Groups**
+## Credits
 
-``CANA`` was developed with support from the following:
+`CANA` was originally written by Rion Brattig Correia and Alexander Gates, and has been developed with the help of many others. Thanks to everyone who has improved `CANA` by contributing code, bug reports (and fixes), documentation, and input on design and features.
 
-- [CASCI](https://homes.luddy.indiana.edu/rocha/casci.php), Indiana University, Bloomington, IN; PI: Luis M. Rocha
-- [CAPES Foundation](https://www.gov.br/capes/pt-br), Ministry of Education of Brazil, Brasília, Brazil; Rion B. Correia.
+## Support
 
-
-Development
------------
-Pull requests are welcome :) Please get in touch with one us beforehand: `rionbr(at)gmail(dot)com` or `ajgates42(at)gmail(dot)com`.
-
-** TODOs**
-
-- Parallelize control methods;
-- Parallelize canalization methods;
-- Generating ensembles of dynamics from structural motifs;
-- Expand on easy-to-replicate tutorials;
-
-Tests
------
-
-Run nosetests -v to perform tests and diagnoses on functions.
-
-
-Changelog
----------
-
-v0.1
-- Canalization methods ported to Cython
-
-v0.0.4
-- Pep8 and python3
-- Pinned controllability methods
-
-v0.0.3
-- Bugfixes
-
-v0.0.2
-- Networkx 2.1 compatibility
-- Inclusion of tutorials
-- Derrida curve
-
-v.0.0.1
-- Control (FVS, MDS, CSTG) methods.
-- Canalization methods.
-- Implementation ported to public package.
+`CANA` has been developed with support from the [Complex Adaptive Systems and Computational Intelligence (CASCI)](https://homes.luddy.indiana.edu/rocha/casci.php) lab at Indiana University, Bloomington, and the [CAPES Foundation](https://www.gov.br/capes/pt-br) of the Ministry of Education of Brazil.

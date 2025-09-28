@@ -6,6 +6,7 @@ Boolean Network
 Main class for Boolean network objects.
 
 """
+
 #   Copyright (C) 2021 by
 #   Rion Brattig Correia <rionbr@gmail.com>
 #   Alex Gates <ajgates@indiana.edu>
@@ -52,53 +53,67 @@ from cana.utils import entropy, flip_binstate_bit_set, output_transitions
 
 
 class BooleanNetwork:
-    """ """
+    """A class for representing and analyzing Boolean Networks.
+
+    This class provides a comprehensive suite of tools for studying the structure
+    and dynamics of Boolean Networks. It supports various input formats,
+    including .cnet and logical expressions, and offers methods for:
+
+    - Structural analysis (e.g., structural graphs, degree distributions).
+    - Dynamical analysis (e.g., state transition graphs, attractors, basins).
+    - Canalization and redundancy quantification.
+    - Network control (e.g., FVS, MDS, structural controllability).
+
+    Attributes:
+        name (str): The name of the network.
+        Nnodes (int): The number of nodes in the network.
+        logic (dict): A dictionary describing the update logic for each node.
+        nodes (list): A list of `BooleanNode` objects representing the nodes.
+    """
 
     def __init__(
         self,
         name="",
         Nnodes=0,
         logic=None,
-        sg=None,
-        stg=None,
-        stg_r=None,
-        _eg=None,
-        attractors=None,
         constants=None,
-        Nconstants=None,
         keep_constants=False,
-        bin2num=None,
-        num2bin=None,
         verbose=False,
-        *args,
-        **kwargs
     ):
-        # NOTE: *args and **kwargs don't do anything. I'm not sure why they wre added here, so I'm not going to remove them.
+        """Initializes a BooleanNetwork instance.
 
-        self.name = name  # Name of the Network
-        self.Nnodes = Nnodes  # Number of Nodes
-        self.logic = logic  # A dict that contains the network logic {<id>:{'name':<string>,'in':<list-input-node-id>,'out':<list-output-transitions>},..}
-        self._sg = sg  # Structure-Graph (SG)
-        self._stg = stg  # State-Transition-Graph (STG)
-        self._stg_r = stg_r  # State-Transition-Graph Reachability dict (STG-R)
-        self._eg = _eg  # Effective Graph, computed from the effective connectivity
-        self._attractors = attractors  # Network Attractors
+        Args:
+            name (str, optional): The name of the network. Defaults to "".
+            Nnodes (int, optional): The number of nodes. Defaults to 0.
+            logic (dict, optional): The network's logic dictionary.
+            constants (dict, optional): A dictionary of constant nodes.
+            keep_constants (bool, optional): If True, constant nodes are
+                preserved in certain calculations. Defaults to False.
+            verbose (bool, optional): If True, enables verbose output for
+                debugging. Defaults to False.
+        """
+
+        self.name = name
+        self.Nnodes = Nnodes
+        self.logic = logic
+        self._sg = None  # Structure-Graph (SG)
+        self._stg = None  # State-Transition-Graph (STG)
+        self._stg_r = None  # State-Transition-Graph Reachability dict (STG-R)
+        self._eg = None  # Effective Graph, computed from the effective connectivity
+        self._attractors = None  # Network Attractors
         #
-        self.keep_constants = (
-            keep_constants  # Keep/Include constants in some of the computations
-        )
+        self.keep_constants = keep_constants
         if constants is None:
             self.constants = {}
         else:
-            self.constants = (
-                constants  # Keep/Include constants in some of the computations
-            )
+            self.constants = constants
 
-        self.Nstates = 2**Nnodes  # Number of possible states in the network 2^N
+        self.Nstates = 2**Nnodes
+
         #
         self.verbose = verbose
 
-        # Intanciate BooleanNodes
+        # Instantiate BooleanNodes
         self.name2int = {logic[i]["name"]: i for i in range(Nnodes)}
         self.Nself_loops = sum(
             [self.name2int[logic[i]["name"]] in logic[i]["in"] for i in range(Nnodes)]
@@ -115,12 +130,9 @@ class BooleanNetwork:
             )
             self.nodes.append(node)
 
-        if Nconstants is None:
-            self.Nconstants = sum(
-                [n.constant for n in self.nodes]
-            )  # Number of constant variables
-        else:
-            self.Nconstants = Nconstants
+        self.Nconstants = sum(
+            [n.constant for n in self.nodes]
+        )  # Number of constant variables
 
         self.input_nodes = [
             i
@@ -131,8 +143,8 @@ class BooleanNetwork:
             )
         ]
         #
-        self.bin2num = bin2num  # Helper function. Converts binstate to statenum. It gets updated by `_update_trans_func`
-        self.num2bin = num2bin  # Helper function. Converts statenum to binstate. It gets updated by `_update_trans_func`
+        self.bin2num = None  # Helper function. Converts binstate to statenum. It gets updated by `_update_trans_func`
+        self.num2bin = None  # Helper function. Converts statenum to binstate. It gets updated by `_update_trans_func`
         self._update_trans_func()  # Updates helper functions and other variables
 
     def __str__(self):
@@ -147,7 +159,9 @@ class BooleanNetwork:
     # I/O Methods
     #
     @classmethod
-    def from_file(self, file, type="cnet", keep_constants=True, **kwargs):
+    def from_file(
+        self, file, type="cnet", keep_constants=True, **kwargs
+    ):
         """
         Load the Boolean Network from a file.
 
@@ -164,7 +178,9 @@ class BooleanNetwork:
         with open(file, "r") as infile:
             if type == "cnet":
                 return self.from_string_cnet(
-                    infile.read(), keep_constants=keep_constants, **kwargs
+                    infile.read(),
+                    keep_constants=keep_constants,
+                    **kwargs,
                 )
             elif type == "logical":
                 return self.from_string_boolean(
@@ -172,9 +188,14 @@ class BooleanNetwork:
                 )
 
     @classmethod
-    def from_string_cnet(self, string, keep_constants=True, **kwargs):
+    def from_string_cnet(
+        self, string, keep_constants=True, **kwargs
+    ):
         """
         Instanciates a Boolean Network from a string in cnet format.
+        The cnet format is similar to the Berkeley Logic Interchange Format (BLIF).
+
+        This function generates a Logic dictionary from the string and uses the :func:`~cana.boolean_network.BooleanNetwork.from_dict` method to generate the Boolean Network object.
 
         Args:
             string (string): A cnet format representation of a Boolean Network.
@@ -323,7 +344,7 @@ class BooleanNetwork:
 
     @classmethod
     def from_dict(self, logic, keep_constants=True, **kwargs):
-        """Instanciaets a BooleanNetwork from a logic dictionary.
+        """Instanciates a BooleanNetwork from a logic dictionary.
 
         Args:
             logic (dict) : The logic dict.
@@ -334,6 +355,20 @@ class BooleanNetwork:
 
         See also:
             :func:`from_file` :func:`from_dict`
+
+        Examples:
+            Logic should be structured as follow:
+
+            .. code-block:: python
+
+                logic = {
+                    0: {'name': 'A', 'in': [1,0], 'out': [0, 1, 0,1]},
+                    1: {'name': 'B', 'in': [0,2], 'out': [0, 1, 0, 1]},
+                    2: {'name': 'C', 'in': [0,1,2], 'out': [0, 1, 1, 0, 0, 1, 1, 0]}
+                }
+
+                # Instanciate the BooleanNetwork
+                bn = BooleanNetwork.from_dict(logic)
         """
         Nnodes = len(logic)
         constants = {}
@@ -520,7 +555,7 @@ class BooleanNetwork:
                 self._eg = nx.DiGraph(
                     name="Effective Graph: "
                     + self.name
-                    + "(Threshold: {threshold:.2f})".format(threshold=threshold)
+                    + f"(Threshold: {threshold:.2f})".format(threshold=threshold)
                 )
             else:
                 self._eg = nx.DiGraph(
@@ -636,9 +671,9 @@ class BooleanNetwork:
 
                 # and update the conditional effective graph with the new edge effectiveness values
                 for i in range(newk):
-                    conditional_eg[new_successor_inputs[i]][n][
-                        "weight"
-                    ] = new_edge_effectiveness[i]
+                    conditional_eg[new_successor_inputs[i]][n]["weight"] = (
+                        new_edge_effectiveness[i]
+                    )
 
                 # now update the conditioned_logic in case these nodes are further modified by additional conditioned variables
                 conditioned_logic[n]["in"] = new_successor_inputs
@@ -853,7 +888,7 @@ class BooleanNetwork:
             return trajectory
 
     def attractor(self, initial):
-        """Computes the trajectory starting at ``initial`` until it reaches an attracor (this is garanteed)
+        """Computes the trajectory starting at ``initial`` until it reaches an attractor (this is guaranteed)
 
         Args:
             initial (string): the initial state.
@@ -1191,7 +1226,7 @@ class BooleanNetwork:
         return "".join(
             [
                 str(node.step("".join(initial[j] for j in self.logic[i]["in"])))
-                if not (i in pinned_var)
+                if i not in pinned_var
                 else initial[i]
                 for i, node in enumerate(self.nodes, start=0)
             ]
@@ -1382,7 +1417,7 @@ class BooleanNetwork:
         max_search=11,
         keep_self_loops=True,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """The minimum set of necessary driver nodes to control the network based on Feedback Vertex Set (FVS) theory.
 
@@ -1582,7 +1617,7 @@ class BooleanNetwork:
         Gstr_shortest_dist, Gstr_shortest_paths = nx.single_source_dijkstra(
             Gstr, source, target=None, cutoff=n_steps
         )
-        Gstr_shortest_dist = {n: int(l) for n, l in Gstr_shortest_dist.items()}
+        Gstr_shortest_dist = {n: int(m) for n, m in Gstr_shortest_dist.items()}
 
         # in the effective graph, calcluate the dijkstra shortest paths from the source to all targets that are shorter than the cufoff
         # where the edge weight is given by the effective weight function
@@ -1593,14 +1628,14 @@ class BooleanNetwork:
         for itar, target in enumerate(target_set):
             # we dont need to worry about a path to iteself (source==target)
             # and if the target doesnt appear in the shortest path dict, then no path exists that is less than the cutoff
-            if target != source and not Gstr_shortest_dist.get(target, None) is None:
+            if target != source and Gstr_shortest_dist.get(target, None) is not None:
                 # the light cone is at least as big as the number of edges in the structural shorest path
                 impact_matrix[
                     0, list(range(Gstr_shortest_dist[target], n_steps + 1)), itar
                 ] = Gstr_shortest_dist[target]
 
                 # if the path exists, then the number of edges (timesteps) is one less than the number of nodes
-                if not Geff_shortest_paths.get(target, None) is None:
+                if Geff_shortest_paths.get(target, None) is not None:
                     eff_path_steps = len(Geff_shortest_paths[target]) - 1
                 else:
                     # or the path doesnt exist
@@ -1633,9 +1668,9 @@ class BooleanNetwork:
 
                     # once the lightcone includes the target node on the effective shortest path,
                     # then for all other steps the effective path is the best
-                    impact_matrix[
-                        1, list(range(eff_path_steps, n_steps + 1)), itar
-                    ] = inv_eff_weight_func(Geff_shortest_dist[target])
+                    impact_matrix[1, list(range(eff_path_steps, n_steps + 1)), itar] = (
+                        inv_eff_weight_func(Geff_shortest_dist[target])
+                    )
 
         return impact_matrix[:, 1:]
 
@@ -1715,7 +1750,7 @@ class BooleanNetwork:
                         DCM.add_edge(
                             in_nei[0],
                             out_nei[1],
-                            **{"type": "simplified", "mode": "selfloop"}
+                            **{"type": "simplified", "mode": "selfloop"},
                         )
                     # Link variables nodes directly
                     elif not any([DCM.nodes[tn]["type"] == "fusion" for tn in in_nei]):
@@ -1723,7 +1758,7 @@ class BooleanNetwork:
                         DCM.add_edge(
                             in_nei[0],
                             out_nei[1],
-                            **{"type": "simplified", "mode": "direct"}
+                            **{"type": "simplified", "mode": "direct"},
                         )
         # Remove Isolates
         isolates = list(nx.isolates(DCM))

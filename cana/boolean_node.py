@@ -6,6 +6,7 @@ Boolean Node
 Main class for Boolean node objects.
 
 """
+
 #   Copyright (C) 2021 by
 #   Rion Brattig Correia <rionbr@gmail.com>
 #   Alex Gates <ajgates@gmail.com>
@@ -14,7 +15,7 @@ Main class for Boolean node objects.
 #   MIT license.
 from __future__ import division
 
-from itertools import combinations, compress, product
+from itertools import combinations, compress, product, permutations
 from statistics import mean
 
 import networkx as nx
@@ -29,7 +30,11 @@ from cana.cutils import (
     outputs_to_binstates_of_given_type,
     statenum_to_binstate,
 )
-from cana.utils import input_monotone, ncr
+from cana.utils import input_monotone, ncr, fill_out_lut
+import random
+import warnings
+from math import comb
+from collections import deque
 
 
 class BooleanNode(object):
@@ -47,7 +52,7 @@ class BooleanNode(object):
         network=None,
         verbose=False,
         *args,
-        **kwargs
+        **kwargs,
     ):
         self.id = id  # the id of the node
         self.name = name  # the name of the node
@@ -73,7 +78,7 @@ class BooleanNode(object):
             )
 
         # If all outputs are either positive or negative, the node is treated as a constant.
-        if (len(set(outputs)) == 1) or (constant):
+        if (len(set(outputs)) == 1 and ("?" not in outputs)) or (constant):
             self.set_constant(constant=True, state=outputs[0])
         else:
             self.set_constant(constant=False)
@@ -110,7 +115,8 @@ class BooleanNode(object):
 
     @classmethod
     def from_output_list(self, outputs=list(), *args, **kwargs):
-        """Instanciate a Boolean Node from a output transition list.
+        """
+        Instanciate a Boolean Node from a output transition list.
 
         Args:
             outputs (list) : The transition outputs of the node.
@@ -119,11 +125,18 @@ class BooleanNode(object):
             (BooleanNode) : the instanciated object.
 
         Example:
-            >>> BooleanNode.from_output_list(outputs=[0,0,0,1], name="AND")
+            >>> BooleanNode.from_output_list(outputs=[0,0,0,1], name="EG")
         """
         id = kwargs.pop("id") if "id" in kwargs else 0
         name = kwargs.pop("name") if "name" in kwargs else "x"
         k = int(np.log2(len(outputs)))
+
+        # checking if length of outputs is a power of 2, else raising an error.
+        if 2**k != len(outputs):
+            raise ValueError(
+                "The number of outputs should be a power of 2. The length of the outputs list should be 2^k."
+            )
+
         inputs = (
             kwargs.pop("inputs") if "inputs" in kwargs else [(x + 1) for x in range(k)]
         )
@@ -137,7 +150,7 @@ class BooleanNode(object):
             state=state,
             outputs=outputs,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     def set_constant(self, constant=True, state=None):
@@ -309,6 +322,12 @@ class BooleanNode(object):
         See Also:
             :func:`input_redundancy`, :func:`input_symmetry`, :func:`~cana.boolean_network.BooleanNetwork.effective_graph`.
         """
+        # checking for '?' values in the outputs
+        if "?" in self.outputs:
+            raise ValueError(
+                "The look-up table contains '?' values. The effective connectivity cannot be computed."
+            )
+
         k_r = self.input_redundancy(operator=operator, norm=False)
         #
         k_e = self.k - k_r
@@ -387,6 +406,8 @@ class BooleanNode(object):
         Returns:
             (float)
         """
+        self._check_compute_canalization_variables(ts_coverage=True)  # compute ts_coverage if not already computed
+
         summand = 0
         # fTheta = a list of TS
         for fTheta in self._ts_coverage.values():
@@ -427,14 +448,26 @@ class BooleanNode(object):
         return df
 
     def schemata_look_up_table(
-        self, type="pi", pi_symbol="#", ts_symbol_list=["\u030A", "\u032F"]
+        self,
+        type="pi",
+        pi_symbol="#",
+        ts_symbol_list=[
+            "\u030a",  # Ring above
+            "\u032f",  # Inverted breve below
+            "\u0303",  # Tilde
+            "\u0304",  # Macron
+            "\u0305",  # Overline
+            "\u0306",  # Breve
+            "\u0307",  # Dot above
+            "\u0308",  # Diaeresis
+        ],
     ):
         """Returns the simplified schemata Look Up Table (LUT)
 
         Args:
             type (string) : The type of schemata to return, either Prime Implicants ``pi`` or Two-Symbol ``ts``. Defaults to 'pi'.
             pi_symbol (str) : The Prime Implicant don't care symbol. Default is ``#``.
-            ts_symbol_list (list) : A list containing Two Symbol permutable symbols. Default is ``["\u030A", "\u032F"]``.
+            ts_symbol_list (list) : A list containing Two Symbol permutable symbols. Default is ``["\u030a", "\u032f"]``.
 
         Returns:
             (pandas.DataFrame or Latex): the schemata LUT
@@ -449,6 +482,12 @@ class BooleanNode(object):
         See also:
             :func:`look_up_table`
         """
+        # Check if the outputs contain '?' and generate an error message if it does.
+        if "?" in self.outputs:
+            raise ValueError(
+                "The look-up table contains '?' values. The schemata look-up table cannot be generated."
+            )
+
         r = []
         # Prime Implicant LUT
         if type == "pi":
@@ -576,7 +615,7 @@ class BooleanNode(object):
                     "value": 0,
                     "constant": self.constant,
                     "group": self.id,
-                }
+                },
             )
 
         if output is None or output == 1:
@@ -589,7 +628,7 @@ class BooleanNode(object):
                     "value": 1,
                     "constant": self.constant,
                     "group": self.id,
-                }
+                },
             )
 
         tid = 0
@@ -636,7 +675,7 @@ class BooleanNode(object):
                         "type": "threshold",
                         "tau": tau,
                         "group": self.id,
-                    }
+                    },
                 )
 
                 # Add Edges from Threshold node to output
@@ -666,7 +705,7 @@ class BooleanNode(object):
                                 "mode": "input",
                                 "value": iout,
                                 "group": self.id,
-                            }
+                            },
                         )
                     G.add_edge(iname, tname, **{"type": "literal"})
 
@@ -696,7 +735,7 @@ class BooleanNode(object):
                                     "mode": "input",
                                     "value": 0,
                                     "group": self.id,
-                                }
+                                },
                             )
                         G.add_edge(iname, fname, **{"type": "fusing"})
                     G.add_edge(fname, tname, **{"type": "fused"})
@@ -728,7 +767,7 @@ class BooleanNode(object):
                                     "mode": "input",
                                     "value": 1,
                                     "group": self.id,
-                                }
+                                },
                             )
                         G.add_edge(iname, fname, **{"type": "fusing"})
                     G.add_edge(fname, tname, **{"type": "fused"})
@@ -817,7 +856,7 @@ class BooleanNode(object):
             raise Exception("Canalization variable name not found. %s" % kwargs)
         return True
 
-    def bias(self):
+    def bias(self, verbose=False):
         r"""The node bias. The sum of the boolean output transitions divided by the number of entries (:math:`2^k`) in the LUT.
 
         .. math::
@@ -830,7 +869,19 @@ class BooleanNode(object):
         See Also:
             :func:`~cana.boolean_network.BooleanNetwork.network_bias`
         """
-        return sum(map(int, self.outputs)) / 2**self.k
+        if verbose:
+            if "?" in self.outputs:
+                warnings.warn(
+                    "There is a '?' value in the output. It will be treated as zero for the bias calculation."
+                )
+
+        outputs = [
+            0 if output == "?" else output for output in self.outputs
+        ]  # added this condition so that bias function plays nice with '?' output values. It will treat missing outputs as 0.
+
+        bias = sum(map(int, outputs)) / 2**self.k
+
+        return bias
 
     def c_sensitivity(self, c, mode="default", max_k=0):
         """Node c-sensitivity.
@@ -913,3 +964,754 @@ class BooleanNode(object):
         ]
 
         return input_sign_list
+
+    @classmethod
+    def from_partial_lut(
+        self,
+        partial_lut: list,
+        fill_missing_output_randomly: bool = False,
+        fill_clashes: bool = False,
+        verbose: bool = False,
+        *args,  # keeping this because it is used in the from_output_list method. I don't know what it does.
+        **kwargs,  # same as above
+    ) -> "BooleanNode":
+        """
+        Instantiate a Boolean Node from a partial look-up table.
+
+        Uses the fill_out_lut function to complete the look-up table. Extracts the output list from the completed look-up table. Then instantiates the Boolean Node from the output list using the from_output_list method.
+
+        Args:
+            partial_lut (list) : A partial look-up table of the node.
+            fill_missing_output_randomly (bool) : If True, missing output values are filled with random 0 or 1. If False, missing output values are filled with '?'.
+            fill_clashes (bool) : If True, fill the clashing output values with the first value in the list. If False, raise an error.
+            verbose (bool) : If True, print additional information.
+
+        Returns:
+            (BooleanNode) : the instantiated object.
+
+        Example:
+            >>> BooleanNode.from_partial_lut(partial_lut=[('00', 0), ('01', 1), ('11', 1)], verbose=True, name="EG")
+            >>> BooleanNode.from_partial_lut(partial_lut=[('00', 0), ('01', 1), ('11', 1)], fill_missing_output_randomly=True, verbose=False, name="EG")
+
+
+        Note:
+            The partial look-up table should be a list of tuples where each tuple contains a binary input state and the corresponding output value. For example, [('00', 0), ('01', 1), ('11', 1)].
+            The fill_missing_output_randomly should be a boolean value.
+
+        """
+
+        generated_lut = fill_out_lut(
+            partial_lut, fill_clashes=fill_clashes, verbose=verbose
+        )
+        output_list = [x[1] for x in generated_lut]
+
+        generated_node = BooleanNode.from_output_list(output_list, *args, **kwargs)
+
+        # Fill missing output values with the specified bias or with specified effective connectivity or randomly
+
+        if fill_missing_output_randomly: 
+            # Replace '?' in generated_node.outputs with 0 or 1 randomly
+            generated_node.outputs = [
+                random.choice(["0", "1"]) if output == "?" else output
+                for output in generated_node.outputs
+            ]
+
+        if verbose and ("?" in generated_node.outputs):
+            print("The LUT is incomplete. Missing values are represented by '?'.")
+        return generated_node
+
+    def fill_missing_output_randomly(self, limit=None):
+        """
+        Generate a node with missing output values filled randomly.
+
+        Args:
+            node (BooleanNode) : The node to generate with. The node must contain missing '?' output values.
+
+        Returns:
+            A Generator of BooleanNode objects with missing output values filled randomly.
+
+        Example:
+            >>> BooleanNode.fill_missing_output_randomly(limit=10)
+        """
+        generated_node = self
+
+        # check if there are any missing output values
+        if "?" not in generated_node.outputs:
+            raise ValueError("There are no missing output values in the node.")
+
+        # Replace '?' in generated_node.outputs with 0 or 1 randomly
+        while True:
+            new_outputs = [
+                random.choice(["0", "1"]) if output == "?" else output
+                for output in generated_node.outputs
+            ]
+            yield BooleanNode.from_output_list(new_outputs)
+
+            if limit is not None:
+                if limit == 0:
+                    break
+                limit -= 1
+
+    def generate_with_required_bias(
+        self,
+        bias=None,
+        verbose=False,
+        *args,
+        **kwargs,
+    ):
+        """
+        Generate a node with the required bias.
+        This node takes a boolean node with "?" output values and generates all possible nodes with the missing output values filled to achieve the required bias as closely as possible.
+
+        Args:
+            bias (float) : The required node bias to fill the missing output values with.
+            verbose (bool) : If True, print additional information.
+
+        Returns:
+            A Generator of BooleanNode objects with the required bias.
+
+        Example:
+            >>> BooleanNode.generate_with_required_bias(bias=0.5, verbose=True, name="EG")
+
+        Note:
+            The required node bias should be a float value between 0 and 1.
+        """
+        generated_node = self
+        bias_for_print = (
+            bias  # making a copy for print statement at the end of function
+        )
+        # Checking if more than one out of effective_connectivity, requried_node_bias and fill_missing_output_randomly are True, then raise an error.
+        if bias is None:
+            raise ValueError(
+                "Please specify the required node bias to generate the node with the required bias."
+            )
+
+        if (
+            bias is not None
+        ):  # If required node bias is specified, then fill missing output values with the specified bias.
+            # Checking if required node bias is within the achievable bias range of the node.
+
+            # Calculating max achievable bias
+            max_achievable_output = [
+                "1" if output == "?" else output for output in generated_node.outputs
+            ]
+            max_achievable_bias = (
+                sum(map(int, max_achievable_output)) / 2**generated_node.k
+            )
+
+            # Calculating the number of '1' required to achieve the required bias.
+            required_ones = int(bias * 2**generated_node.k)
+            current_ones = generated_node.outputs.count("1")
+
+            min_achievable_bias = current_ones / 2**generated_node.k
+            min = False  # flag to check if the required bias is less than the minimum achievable bias.
+            # Checking if the required bias is achievable.
+            if bias > max_achievable_bias:
+                if verbose:
+                    warnings.warn(
+                        f"Required Node Bias is greater than the maximum achievable bias ({max_achievable_bias}) of the node. Generating with the maximum achievable bias."
+                    )
+                bias = max_achievable_bias
+
+            elif bias < min_achievable_bias:
+                if verbose:
+                    warnings.warn(
+                        f"Required Node Bias is lower than the minimum achievable bias ({min_achievable_bias}) of the node. Generating with the minimum achievable bias."
+                    )
+                bias = min_achievable_bias
+                min = True
+
+            # Fill the missing output values to achieve the required bias as closely as possible.
+            required_ones = int(
+                bias * 2**generated_node.k
+            )  # recalculating in case the required bias was adjusted in the above steps.
+            ones_to_be_generated = required_ones - current_ones
+            number_of_missing_values = generated_node.outputs.count("?")
+
+            missing_output_values = (
+                ["1"] * ones_to_be_generated
+                + ["0"] * (number_of_missing_values - ones_to_be_generated)
+            )  # creating a list of 1 and 0 to replace the '?' with the right ratio required to achieve the required bias.
+
+            combinationsnumber = comb(number_of_missing_values, ones_to_be_generated)
+
+            def unique_permutations_missing_values(elements, n):
+                """
+                Generate n unique permutations of elements. Shuffle the elements till a new arrangement is found. 
+                """
+                seen = set()
+
+                while len(seen) < n:
+                    perm = elements.copy()
+                    random.shuffle(perm)
+                    perm_as_str = str(perm)  # Convert to string for hashability
+                    if perm_as_str not in seen:
+                        seen.add(perm_as_str)
+                        yield perm
+                        if len(seen) == n:
+                            return
+
+            combinations = unique_permutations_missing_values(
+                missing_output_values, combinationsnumber
+            )
+            generated_node_permutations = []
+
+            def node_permutations(
+                combinations, node_outputs, missing_output_indices, *args, **kwargs
+            ):
+                """
+                Applying the generated combinations to the missing output values and generating the BooleanNode objects.
+                """ 
+
+                for combination in combinations:
+                    combination = list(combination)
+                    generated_outputs = node_outputs.copy()
+                    for index in missing_output_indices:
+                        generated_outputs[index] = combination.pop()
+                    yield BooleanNode.from_output_list(
+                        generated_outputs, *args, **kwargs
+                    )
+
+            node_outputs = generated_node.outputs
+            missing_output_indices = [i for i, x in enumerate(node_outputs) if x == "?"]
+            generated_node_permutations = node_permutations(
+                combinations,
+                node_outputs=node_outputs,
+                missing_output_indices=missing_output_indices,
+                *args,
+                **kwargs,
+            )
+
+            output_bias_for_print = (
+                ones_to_be_generated + current_ones
+            ) / 2**generated_node.k  # for the print message in the end
+            if verbose:
+                if min:
+                    print(
+                        f"{combinationsnumber:.2e} possible permutation(s) with a bias of {output_bias_for_print}. This is the closest achievable bias to the required bias of {bias_for_print}."
+                    )
+                else:
+                    print(
+                        f"{combinationsnumber:.2e} possible permutation(s) with a bias of {output_bias_for_print}. This is the closest bias less than or equal to the required bias of {bias_for_print}."
+                    )
+            return generated_node_permutations  # returning a generator of BooleanNode objects with the required bias.
+
+    def generate_with_required_effective_connectivity(
+        self,
+        effective_connectivity=None,
+        epsilon=0.01,
+        shuffle=False,  # depending on required effective connectivity, this can be faster or slower.
+        verbose=False,
+        *args,
+        **kwargs,
+    ):
+        """
+        Generate a node with the required effective connectivity.
+        This node takes a boolean node with "?" output values and generates all possible nodes with the missing output values filled to achieve the required effective connectivity as closely as possible.
+
+        Args:
+            effective_connectivity (float) : The required effective connectivity to fill the missing output values with. It will generate a node with the closest possible effective connectivity to the required effective connectivity.
+            verbose (bool) : If True, print additional information.
+
+        Returns:
+            (BooleanNode) : the instantiated object.
+
+        Example:
+            >>> BooleanNode.generate_with_required_effective_connectivity(effective_connectivity=0.5, verbose=True, name="EG")
+
+        Note:
+            The required effective connectivity should be a float value between 0 and 1.
+
+        """
+
+        if effective_connectivity is None:
+            raise ValueError("Please provide a required effective connectivity value.")
+
+        generated_node = self
+        generated_outputs = generated_node.outputs.copy()
+        missing_output_count = generated_outputs.count("?")
+        if verbose:
+            print(f"No. of '?' in output = {missing_output_count}.")
+
+        missing_output_indices = [
+            i for i, x in enumerate(generated_outputs) if x == "?"
+        ]
+
+        missing_permutations = product(*[("0", "1")] * (missing_output_count))
+
+        generated_node_permutations = []
+
+        def permutations_with_ec(
+            missing_permutations,
+            missing_output_indices,
+            generated_outputs,
+            effective_connectivity=effective_connectivity,
+            epsilon=epsilon,
+            shuffle=shuffle,
+            *args,
+            **kwargs,
+        ):
+            """
+            applying all permutations of 1's and 0's to '?' values in the output list.
+            Generating a BooleanNode object with evert permutation and checking if its effective connectivity is close enough to the required effective connectivity.
+            Returning a generator of all nodes with close enough required effective connectivity.
+            """
+            # count = 0  # counting number of nodes generated till a suitable one is found. To understand how the search space is being traversed.
+            found_at_least_one = False
+            closest_ec_node = None
+            for perm in missing_permutations:
+                # count += 1
+
+                # shuffling the permutation to access the entire search space randomly. Turn off if not needed. NOTE: shuffle is faster for certain required K_e values.
+                if shuffle:
+                    perm = list(perm)
+                    random.shuffle(perm)
+
+                output = generated_outputs.copy()
+                for i, index in enumerate(missing_output_indices):
+                    output[index] = perm[i]
+
+                node = BooleanNode.from_output_list(output, *args, **kwargs)
+                if (
+                    node.is_within_tolerance(
+                        effective_connectivity=effective_connectivity,
+                        epsilon=epsilon,
+                    )
+                    is True
+                ):
+                    # print(count)
+                    # count = 0
+                    found_at_least_one = True  # we found at least one node within epsilon. there is now no need to find the closest possible one.
+
+                    yield node
+
+                if found_at_least_one is False:
+                    # if we can't find a single rule within epsilon, let's return the closest possible one.
+
+                    if closest_ec_node is None:
+                        closest_ec_node = node
+                        smallest_gap = abs(
+                            node.effective_connectivity() - effective_connectivity
+                        )
+                    else:
+                        gap = abs(
+                            node.effective_connectivity() - effective_connectivity
+                        )
+                        if gap < smallest_gap:
+                            closest_ec_node = node
+                            smallest_gap = gap
+                        # else:
+                        #     continue
+                # else:
+                #     continue
+
+            if found_at_least_one is False:
+                warnings.warn(
+                    f"No node within {epsilon} of {effective_connectivity} (required effective connectivity) found.\nGenerating a node with the closest effective connectivity of {closest_ec_node.effective_connectivity()}"
+                )
+                yield closest_ec_node
+
+        generated_node_permutations = permutations_with_ec(
+            missing_permutations,
+            missing_output_indices,
+            generated_outputs,
+            effective_connectivity,
+            epsilon=epsilon,
+            *args,
+            **kwargs,
+        )
+
+        if verbose:
+            print(
+                f"Returning a generator of nodes with effective connectivity within {epsilon} of {effective_connectivity}."
+            )
+
+        return generated_node_permutations  # returning a generator of BooleanNode objects with close enough effective connectivity.
+
+    def is_within_tolerance(self, effective_connectivity=None, bias=None, epsilon=0.01):
+        """
+        Check if the node's effective connectivity or bias is within the required tolerance.
+
+        Args:
+            effective_connectivity (float) : The required effective connectivity value.
+            required_bias (float) : The required bias value.
+            epsilon (float) : The tolerance value.
+
+        Returns:
+            (bool) : True if the node's effective connectivity or bias (or both, if both are specified) is within the required tolerance, False otherwise.
+
+        """
+        if (effective_connectivity is None) and (bias is None):
+            raise ValueError(
+                "Please provide a required effective connectivity value or required bias."
+            )
+
+        if effective_connectivity is not None:
+            if abs(self.effective_connectivity() - effective_connectivity) < epsilon:
+                result = True
+            else:
+                result = False
+
+        if bias is not None:
+            if abs(self.bias() - bias) < epsilon:
+                result = True
+            else:
+                result = False
+
+        return result
+
+    def get_annihilation_generation_rules(
+        self, type: str = "wildcard", split: bool = False
+    ) -> list:
+        """
+        Get the annihilation and generation rules of the node.
+        The annihilation rules are the rules that output 0 when the middle input is 1.
+        The generation rules are the rules that output 1 when the middle input is 0.
+
+
+        Args:
+            split (bool) : If True, return the annihilation and generation rules separately. If False, return the annihilation and generation rules together.
+            type (str) : The type of coverage function to use. Options are 'wildcard' and 'ts', where 'ts' is the two-symbol version.
+
+        Returns:
+            (list) : A list of annihilation and generation rules. If 'ts' is selected, the list contains the input and two-symbol indices for each rule.
+
+        Method:
+            Creates a Look_up_table for the node.
+            It generates new lookup tables for annihilation(using logic [RULE & (NOT X_4)]) and generation(using logic [NOT RULE & (X_4)]).
+            The rows that output 1 in the new schematas are the annihilations and generations.
+            We combine the two dataframes to get the final dataframe. We reassign the annihilation output to 0. We reassign the generation output to 1.
+            We return the final dataframe as a list.
+
+        Example:
+            >>> get_annihilation_generation_rules(type='wildcard', split=False)
+            [('0##1##0', 0), ('0#01###', 0), ('0##10##', 0), ('1##0##1', 1), ('##10##1', 1), ('###01#1', 1)]
+
+            >>> get_annihilation_generation_rules(type='ts', split=False)
+            [['0#01###', [[2, 4, 6]]], ['1##0##1', [[0, 2, 4]]]], where inputs with indicies 2,4,6 in the first rule are interchangeable and inputs with indicies 0,2,4 in the second rule are interchangeable.
+
+
+        """
+
+        if type not in ["wildcard", "ts"]:
+            raise ValueError("Invalid type. Expected 'wildcard' or 'ts'.")
+
+        lut = self.look_up_table()
+        annihilation_outputs_lut = (  # generates an LUT which is RULE & (NOT X_4), where X_4 is the middle input. the result is 1 for all the rules that annihilate and 0 for all the others.
+            ((lut["Out:"] == "0") & (lut["In:"].str[3] == "1"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+        generation_outputs_lut = (  # generates an LUT which is NOT RULE & (X_4), where X_4 is the middle input. the result is 1 for all the rules that generate and 0 for all the others.
+            ((lut["Out:"] == "1") & (lut["In:"].str[3] == "0"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+
+        annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
+        generation = BooleanNode.from_output_list(generation_outputs_lut)
+
+        if type == "wildcard":
+            annihilation._check_compute_canalization_variables(prime_implicants=True)
+            generation._check_compute_canalization_variables(prime_implicants=True)
+
+            # get the prime implicants for the annihilation and generation
+            pia = annihilation._prime_implicants.get("1", [])
+            pig = generation._prime_implicants.get("1", [])
+
+            anni_schemata = []
+            gen_schemata = []
+            for item in pia:
+                anni_schemata.append((item, 0))
+            for item in pig:
+                gen_schemata.append((item, 1))
+            if split:
+                return anni_schemata, gen_schemata
+            return anni_schemata + gen_schemata
+
+        elif type == "ts":
+            generation._check_compute_canalization_variables(two_symbols=True)
+            annihilation._check_compute_canalization_variables(two_symbols=True)
+
+            # get the two-symbol logic
+            tsa = annihilation._two_symbols[1]
+            tsg = generation._two_symbols[1]
+
+            # replace 2 with # (other all ts coverage functions are built with '2' for wildcard)
+            tsa = [
+                [
+                    item.replace("2", "#") if isinstance(item, str) else item
+                    for item in sublist
+                ]
+                for sublist in tsa
+            ]
+            tsg = [
+                [
+                    item.replace("2", "#") if isinstance(item, str) else item
+                    for item in sublist
+                ]
+                for sublist in tsg
+            ]
+
+            # keep only schemata inputs and the two symbol indices for each row
+            tsa = [sublist[:2] for sublist in tsa]
+            tsg = [sublist[:2] for sublist in tsg]
+            if split:
+                return tsa, tsg
+            return tsa + tsg
+    
+    def input_symmetry_mean_anni_gen(self, norm = False):
+        """
+        Input symmetry for the annihilation and generation rules of the node.
+        The mean of the number of input values that are # for all annihilation and generation rules.
+
+        Returns:
+            (float) : The mean of the number of input values that are # for all annihilation and generation rules.
+
+        """
+
+
+        self._check_compute_canalization_variables(ts_coverage=True) # computing the ts_coverage if not already computed
+        
+        # anni_gen = self.get_annihilation_generation_rules() # getting the annihilation generation rules for the node
+        # anni_gen_coverage = [] # dict to store the rules covered in anni_gen
+        # for key, value in fill_out_lut(anni_gen): # expanding anni_gen rules to get the rules covered in LUT
+        #     if value != '?':
+        #         anni_gen_coverage.append(key) # NOTE: RELEAGTED THIS AFTER CREATING get_anni_gen_coverage FUNCTION
+        temp_coverage = self.get_anni_gen_coverage(type="wildcard") # getting the wildcard coverage of the node
+        anni_gen_coverage = [k for k, v in temp_coverage.items() if v] # getting the rules covered in anni_gen
+
+        summand = 0 # summand for the mean of the number of input values that are # if the rule is covered in two-symbol
+        for rule in anni_gen_coverage: # only iterating over the rules that are covered in anni_gen
+            inner = 0
+            for ts in self._ts_coverage[rule]:  # TODO: [SRI] CHECK IF THIS IS CORRECT
+                inner += sum(
+                            len(i) for i in ts[1]
+                        )
+            summand += inner / len(self._ts_coverage[rule])
+        
+        if len(anni_gen_coverage) == 0:
+            return 0
+        
+        if norm:
+            return (summand / len(anni_gen_coverage)) / self.k
+        
+        return (
+            summand / len(anni_gen_coverage)
+        )  # returning the mean of the number of input values that are not # for all anni_gen rules
+
+    def get_anni_gen_coverage(self, type="wildcard"):
+        """
+        Computes the coverage of the annihilation and generation functions of the BooleanNode.
+        This is different from the pi_coverage() and ts_coverage() which compute regular prime implicant and two-symbol coverage.
+
+        The coverage is computed in two ways:
+        1. wildcard: computes the wildcard schemata that cover the LUT entries.
+        2. ts: computes the two-symbol schemata that cover the LUT entries.
+
+        Parameters:
+        -----------
+        n: BooleanNode
+            The BooleanNode for which the coverage is computed.
+        type: str
+            The type of coverage to compute. Can be either 'wildcard' or 'ts'.
+
+        Returns:
+        --------
+        For type='wildcard':
+            A dict: Keys- LUT entries in binary format, Values- the wildcard schemata that covers the LUT entry.
+
+            Example:
+            '0100100': {'#1#01#0', '#1#010#', '#1001##'},
+
+        For type='ts':
+            A dict: Keys- LUT entries in binary format, Values- the two symbol schemata that covers the LUT entry.
+
+            Example:
+                '0011010': [
+                ['0021210', [], [[0, 1, 6], [3, 5], [2, 4]]],
+                ['2121020', [[1, 5]], [[4, 6], [1, 3], [0, 2, 5]]]
+                ]
+                Here, the LUT entry 0011010 is covered by two schemata. The first schema is 0021210 with no ts-indices, zero-indices are [0, 1, 6], one-indices are [3, 5] and wildcard-indices are [2, 4]. The second schema is 2121020 with ts-indices [1, 5], zero-indices are [4, 6], one-indices are [1, 3] and wildcard-indices are [0, 2, 5].
+        """
+        if type not in ["wildcard", "ts"]:
+            raise ValueError("Invalid type. Expected 'wildcard' or 'ts'.")
+
+        lut = self.look_up_table()
+        annihilation_outputs_lut = (
+            ((lut["Out:"] == "0") & (lut["In:"].str[3] == "1"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+        generation_outputs = (
+            ((lut["Out:"] == "1") & (lut["In:"].str[3] == "0"))
+            .apply(lambda x: "1" if x else "0")
+            .tolist()
+        )
+
+        annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
+        generation = BooleanNode.from_output_list(generation_outputs)
+
+        def _get_wildcard_coverage(
+            annihilation: BooleanNode, generation: BooleanNode
+        ) -> dict:
+            """
+            Helper function for get_anni_gen_coverage().
+            Computes which LUT entries are covered by the wildcard schemata of the annihilation and generation functions.
+
+            """
+            annihilation._check_compute_canalization_variables(prime_implicants=True)
+            generation._check_compute_canalization_variables(prime_implicants=True)
+
+            pia = annihilation._prime_implicants.get("1", [])
+            pig = generation._prime_implicants.get("1", [])
+
+            pia_coverage = {
+                k: v.intersection(pia) for k, v in annihilation.pi_coverage().items()
+            }
+            pig_coverage = {
+                k: v.intersection(pig) for k, v in generation.pi_coverage().items()
+            }
+
+            annigen_coveragev2 = {}
+            for item in [pia_coverage, pig_coverage]:
+                for key, value in item.items():
+                    if key in annigen_coveragev2:
+                        annigen_coveragev2[key].update(value)
+                    else:
+                        annigen_coveragev2[key] = value
+
+            return annigen_coveragev2
+
+        def _get_ts_coverage(
+            annihilation: BooleanNode, generation: BooleanNode, k: int
+        ) -> dict:
+            """
+            Helper function for get_anni_gen_coverage().
+            Computes which LUT entries are covered by the two-symbol schemata of the annihilation and generation functions.
+            """
+
+            def _expand_schema(line: str) -> list:
+                def _insert_char(la, lb):
+                    return "".join([la[i] + lb[i] for i in range(len(lb))] + [la[-1]])
+
+                chunks = line.split("2")
+                if len(chunks) > 1:
+                    return [
+                        _insert_char(chunks, i)
+                        for i in product(*[("0", "1")] * (len(chunks) - 1))
+                    ]
+                return [line]
+
+            def _expand_ts_logic(two_symbols, permut_indexes):
+                if isinstance(two_symbols, str):
+                    two_symbols = [list(two_symbols)]
+                Q = deque(two_symbols)
+                logics = []
+                while Q:
+                    implicant = np.array(Q.pop())
+                    for idxs in permut_indexes:
+                        for vals in permutations(implicant[idxs], len(idxs)):
+                            _implicant = np.copy(implicant)
+                            _implicant[idxs] = vals
+                            if _implicant.tolist() not in logics:
+                                logics.append(_implicant.tolist())
+                                Q.append(_implicant.tolist())
+                return logics
+
+            generation._check_compute_canalization_variables(two_symbols=True)
+            annihilation._check_compute_canalization_variables(two_symbols=True)
+
+            tsa = annihilation._two_symbols[1]
+            tsg = generation._two_symbols[1]
+
+            ts_coverage = {str(bin(i)[2:].zfill(k)): [] for i in range(2**k)}
+            for row in tsa + tsg:
+                expanded_ts_schema = (
+                    _expand_ts_logic(row[0], row[1]) if row[1] else [row[0]]
+                )  # if there are no permutable indexes, then the schema is already expanded
+                for ts_schema in expanded_ts_schema:
+                    for schema in _expand_schema("".join(ts_schema)):
+                        if row not in ts_coverage[schema]:
+                            ts_coverage[schema].append(row)
+            return ts_coverage
+
+        if type == "wildcard":
+            return _get_wildcard_coverage(annihilation, generation)
+        elif type == "ts":
+            return _get_ts_coverage(annihilation, generation, self.k)
+
+    def input_redundancy_anni_gen(self, operator=mean, norm=False):
+        """
+        The redundancy of the annihilation and generation rules of the node.
+        The mean of the number of '#' in the annihilation and generation rules that cover a row in the LUT.
+
+        Args:
+            operator (function) : The operator to use to calculate the redundancy. Default is mean.
+            norm (bool) : If True, normalize the redundancy.
+
+        Returns:
+            (float) : The redundancy of the annihilation and generation rules of the node.
+
+        See Also:
+            :func:`~cana.boolean_node.BooleanNode.get_anni_gen_coverage`
+        """
+        if not hasattr(operator, "__call__"):
+            raise AttributeError(
+                'The operator you selected must be a function. Try "min", "statitics.mean", or "max".'
+            )
+
+        anni_gen_coverage = {}
+        anni_gen_coverage = self.get_anni_gen_coverage()
+        redundancy = [
+            operator([pi.count("#") for pi in anni_gen_coverage[binstate]])
+            if len(anni_gen_coverage[binstate]) > 0
+            else 0
+            for binstate in anni_gen_coverage
+        ]
+
+        valid_binstate_count = len(
+            [
+                binstate
+                for binstate in anni_gen_coverage
+                if len(anni_gen_coverage[binstate]) > 0
+            ]
+        )
+        if valid_binstate_count == 0: # checking for division by zero error
+            return 0 # if there are no rules that cover the LUT entries, then the redundancy is 0.
+
+        annigen_kr = sum(redundancy) / len(
+            [
+                binstate
+                for binstate in anni_gen_coverage
+                if len(anni_gen_coverage[binstate]) > 0
+            ]
+        )
+        if norm:
+            # Normalizes
+            annigen_kr = annigen_kr / self.k
+
+        return annigen_kr
+
+    def effective_connectivity_anni_gen(self, operator=mean, norm=False):
+        """
+        The effective connectivity of the annihilation and generation rules of the node.
+        The Effective Connectiviy is the mean number of input nodes needed to determine the transition of the node. We take the average effective connectivity of the annihilation and generation rules.
+
+        Args:
+            operator (function) : The operator to use to calculate the effective connectivity. Default is mean.
+            norm (bool) : If True, normalize the effective connectivity.
+
+        Returns:
+            (float) : The effective connectivity of the annihilation and generation rules of the node.
+
+        See Also:
+            :func:`get_anni_gen_coverage`, :func:`input_redundancy_anni_gen`, :func:`input_redundancy`, :func:`effective_connectivity`.
+        """
+        anni_gen_k_r = self.input_redundancy_anni_gen(operator=operator, norm=False)
+        anni_gen_k_e = self.k - anni_gen_k_r
+
+        if norm:
+            anni_gen_k_e = anni_gen_k_e / self.k
+
+        return anni_gen_k_e

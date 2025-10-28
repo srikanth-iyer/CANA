@@ -24,43 +24,59 @@ import numpy as np
 #
 # GRASP method
 #
-def fvs_grasp(directed_graph, max_iter=100, keep_self_loops=True):
-    """The Feedback Vertex Set GRASP implementation.
+def fvs_grasp(directed_graph, max_iter=100, keep_self_loops=True, alpha_set=None, update_period=10):
+    """The Feedback Vertex Set GRASP implementation with Reactive GRASP enhancement.
     This implementation is not exact but it is recommended for very large graphs.
 
     Args:
         directed_graph (networkx.DiGraph) : The structure graph.
         max_iter (int) : Maximum number of iterations for the search.
         keep_self_loops (bool) : If self-loops are used in the computation. By FVS theory, all self-loop nodes are needed for control.
+        alpha_set (list, optional): A list of alpha values for the Reactive GRASP. Defaults to [0.1, 0.2, ..., 1.0].
+        update_period (int, optional): The number of iterations after which to update the alpha probabilities. Defaults to 10.
     Returns:
         (list) : A list of sets with the driver nodes.
     See also:
         :func:`fvs_bruteforce`.
     """
     if keep_self_loops:
-        S = set(nx.nodes_with_selfloops(directed_graph))
-
+        S_initial = set(nx.nodes_with_selfloops(directed_graph))
     else:
-        directed_graph = copy.deepcopy(directed_graph)
-        directed_graph.remove_edges_from(directed_graph.selfloop_edges())
-        S = set([])
+        S_initial = set([])
 
     root_var = _root_variables(directed_graph, keep_self_loops=keep_self_loops)
-    S = S.union(root_var)
+    S_initial = S_initial.union(root_var)
 
-    minfvc = set([frozenset(directed_graph.nodes())])
+    minfvc = {frozenset(directed_graph.nodes())}
 
-    reduced_graph = directed_graph.copy()
+    if alpha_set is None:
+        alpha_set = np.arange(0.1, 1.1, 0.1)
 
-    for _ in range(max_iter):
-        alpha = np.random.random()
-        S = _construct_greedy_randomized_solution(reduced_graph, alpha, S)
+    alpha_probs = np.ones(len(alpha_set)) / len(alpha_set)
+    alpha_quality = np.zeros(len(alpha_set))
+
+    for i in range(max_iter):
+        alpha_idx = np.random.choice(len(alpha_set), p=alpha_probs)
+        alpha = alpha_set[alpha_idx]
+
+        S = _construct_greedy_randomized_solution(directed_graph.copy(), alpha, S_initial.copy())
         S = _local_search(directed_graph.copy(), S)
-        compare_set = next(iter(minfvc))
-        if len(S) == len(compare_set):
+
+        current_min_len = len(next(iter(minfvc)))
+        alpha_quality[alpha_idx] += (current_min_len - len(S))
+
+        if len(S) == current_min_len:
             minfvc.add(frozenset(S))
-        elif len(S) < len(compare_set):
-            minfvc = set([frozenset(S)])
+        elif len(S) < current_min_len:
+            minfvc = {frozenset(S)}
+
+        if (i + 1) % update_period == 0:
+            total_quality = np.sum(alpha_quality)
+            if total_quality > 0:
+                alpha_probs = alpha_quality / total_quality
+            else:
+                alpha_probs = np.ones(len(alpha_set)) / len(alpha_set)
+            alpha_quality = np.zeros(len(alpha_set))
 
     return list(minfvc)
 

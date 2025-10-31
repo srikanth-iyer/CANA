@@ -1469,36 +1469,22 @@ class BooleanNode(object):
             (float) : The mean of the number of input values that are # for all annihilation and generation rules.
 
         """
-
-
-        self._check_compute_canalization_variables(ts_coverage=True) # computing the ts_coverage if not already computed
-        
-        # anni_gen = self.get_annihilation_generation_rules() # getting the annihilation generation rules for the node
-        # anni_gen_coverage = [] # dict to store the rules covered in anni_gen
-        # for key, value in fill_out_lut(anni_gen): # expanding anni_gen rules to get the rules covered in LUT
-        #     if value != '?':
-        #         anni_gen_coverage.append(key) # NOTE: RELEAGTED THIS AFTER CREATING get_anni_gen_coverage FUNCTION
-        temp_coverage = self.get_anni_gen_coverage(type="wildcard") # getting the wildcard coverage of the node
-        anni_gen_coverage = [k for k, v in temp_coverage.items() if v] # getting the rules covered in anni_gen
-
-        summand = 0 # summand for the mean of the number of input values that are # if the rule is covered in two-symbol
-        for rule in anni_gen_coverage: # only iterating over the rules that are covered in anni_gen
+        summand = 0
+        ts_coverage = self.get_anni_gen_coverage(type="ts")
+        ts_coverage = {k: v for k, v in ts_coverage.items() if v}  # keep only non-empty entries
+        if not ts_coverage:
+            return 0.0
+        # fTheta = a list of TS
+        for fTheta in ts_coverage.values():
             inner = 0
-            for ts in self._ts_coverage[rule]:  # TODO: [SRI] CHECK IF THIS IS CORRECT
+            for ts in fTheta:
                 inner += sum(
-                            len(i) for i in ts[1]
-                        )
-            summand += inner / len(self._ts_coverage[rule])
-        
-        if len(anni_gen_coverage) == 0:
-            return 0
-        
+                    len(i) for i in ts[1]
+                )  # assumes that indicies will ever only be in at most 1 group
+            summand += inner / len(fTheta)
         if norm:
-            return (summand / len(anni_gen_coverage)) / self.k
-        
-        return (
-            summand / len(anni_gen_coverage)
-        )  # returning the mean of the number of input values that are not # for all anni_gen rules
+            return (summand / len(ts_coverage)) / self.k  # returning the mean normalized by k
+        return summand / len(ts_coverage)  # returning the mean of the number of input values that are not # for all anni_gen rules
 
     def get_anni_gen_coverage(self, type="wildcard"):
         """

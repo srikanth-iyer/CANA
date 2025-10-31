@@ -1552,7 +1552,7 @@ class BooleanNode(object):
         annihilation = BooleanNode.from_output_list(annihilation_outputs_lut)
         generation = BooleanNode.from_output_list(generation_outputs)
 
-        def _get_wildcard_coverage(
+        def _get_annigen_wildcard_coverage(
             annihilation: BooleanNode, generation: BooleanNode
         ) -> dict:
             """
@@ -1583,7 +1583,7 @@ class BooleanNode(object):
 
             return annigen_coveragev2
 
-        def _get_ts_coverage(
+        def _get_annigen_ts_coverage(
             annihilation: BooleanNode, generation: BooleanNode, k: int
         ) -> dict:
             """
@@ -1637,9 +1637,9 @@ class BooleanNode(object):
             return ts_coverage
 
         if type == "wildcard":
-            return _get_wildcard_coverage(annihilation, generation)
+            return _get_annigen_wildcard_coverage(annihilation, generation)
         elif type == "ts":
-            return _get_ts_coverage(annihilation, generation, self.k)
+            return _get_annigen_ts_coverage(annihilation, generation, self.k)
 
     def input_redundancy_anni_gen(self, operator=mean, norm=False):
         """

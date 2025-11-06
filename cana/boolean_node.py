@@ -33,8 +33,8 @@ from cana.cutils import (
 from cana.utils import input_monotone, ncr, fill_out_lut
 import random
 import warnings
-from math import comb
-from collections import deque
+from math import comb, fsum
+from collections import deque, defaultdict
 
 
 class BooleanNode(object):
@@ -406,18 +406,17 @@ class BooleanNode(object):
         Returns:
             (float)
         """
-        self._check_compute_canalization_variables(ts_coverage=True)  # compute ts_coverage if not already computed
+        self._check_compute_canalization_variables(ts_coverage=True)
 
-        summand = 0
-        # fTheta = a list of TS
-        for fTheta in self._ts_coverage.values():
-            inner = 0
-            for ts in fTheta:
-                inner += sum(
-                    len(i) for i in ts[1]
-                )  # assumes that indicies will ever only be in at most 1 group
-            summand += inner / len(fTheta)
-        return summand / 2**self.k
+        ts_values = self._ts_coverage.values()
+        numerator = 0.0
+        for f_theta in ts_values:
+            if not f_theta:
+                continue
+            f_len = len(f_theta)
+            inner = fsum(len(group) for ts in f_theta for group in ts[1])
+            numerator += inner / f_len
+        return numerator / (1 << self.k)
 
     def look_up_table(self):
         """Returns the Look Up Table (LUT)
@@ -1469,22 +1468,21 @@ class BooleanNode(object):
             (float) : The mean of the number of input values that are # for all annihilation and generation rules.
 
         """
-        summand = 0
         ts_coverage = self.get_anni_gen_coverage(type="ts")
-        ts_coverage = {k: v for k, v in ts_coverage.items() if v}  # keep only non-empty entries
-        if not ts_coverage:
+        coverage_values = [f_theta for f_theta in ts_coverage.values() if f_theta]
+
+        if not coverage_values:
             return 0.0
-        # fTheta = a list of TS
-        for fTheta in ts_coverage.values():
-            inner = 0
-            for ts in fTheta:
-                inner += sum(
-                    len(i) for i in ts[1]
-                )  # assumes that indicies will ever only be in at most 1 group
-            summand += inner / len(fTheta)
+
+        summand = fsum(
+            fsum(len(group) for ts in f_theta for group in ts[1]) / len(f_theta)
+            for f_theta in coverage_values
+        )
+
+        result = summand / len(coverage_values)
         if norm:
-            return (summand / len(ts_coverage)) / self.k  # returning the mean normalized by k
-        return summand / len(ts_coverage)  # returning the mean of the number of input values that are not # for all anni_gen rules
+            return result / self.k
+        return result
 
     def get_anni_gen_coverage(self, type="wildcard"):
         """
@@ -1591,19 +1589,33 @@ class BooleanNode(object):
 
             def _expand_ts_logic(two_symbols, permut_indexes):
                 if isinstance(two_symbols, str):
-                    two_symbols = [list(two_symbols)]
-                Q = deque(two_symbols)
-                logics = []
+                    initial = [list(two_symbols)]
+                else:
+                    initial = [list(ts) for ts in two_symbols]
+
+                seen = set()
+                expanded = []
+                Q = deque(initial)
+
                 while Q:
-                    implicant = np.array(Q.pop())
+                    implicant = Q.pop()
+                    key = tuple(implicant)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    expanded.append(implicant)
+
                     for idxs in permut_indexes:
-                        for vals in permutations(implicant[idxs], len(idxs)):
-                            _implicant = np.copy(implicant)
-                            _implicant[idxs] = vals
-                            if _implicant.tolist() not in logics:
-                                logics.append(_implicant.tolist())
-                                Q.append(_implicant.tolist())
-                return logics
+                        values = [implicant[idx] for idx in idxs]
+                        for vals in permutations(values, len(idxs)):
+                            candidate = implicant.copy()
+                            for idx, val in zip(idxs, vals):
+                                candidate[idx] = val
+                            cand_key = tuple(candidate)
+                            if cand_key not in seen:
+                                Q.append(candidate)
+
+                return expanded
 
             generation._check_compute_canalization_variables(two_symbols=True)
             annihilation._check_compute_canalization_variables(two_symbols=True)
@@ -1611,16 +1623,19 @@ class BooleanNode(object):
             tsa = annihilation._two_symbols[1]
             tsg = generation._two_symbols[1]
 
-            ts_coverage = {str(bin(i)[2:].zfill(k)): [] for i in range(2**k)}
+            ts_coverage = defaultdict(list)
             for row in tsa + tsg:
                 expanded_ts_schema = (
                     _expand_ts_logic(row[0], row[1]) if row[1] else [row[0]]
                 )  # if there are no permutable indexes, then the schema is already expanded
                 for ts_schema in expanded_ts_schema:
                     for schema in _expand_schema("".join(ts_schema)):
-                        if row not in ts_coverage[schema]:
-                            ts_coverage[schema].append(row)
-            return ts_coverage
+                        existing = ts_coverage[schema]
+                        if row not in existing:
+                            existing.append(row)
+            for state in (str(bin(i)[2:].zfill(k)) for i in range(2**k)):
+                ts_coverage.setdefault(state, [])
+            return dict(ts_coverage)
 
         if type == "wildcard":
             return _get_annigen_wildcard_coverage(annihilation, generation)

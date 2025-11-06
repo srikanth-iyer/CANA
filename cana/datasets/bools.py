@@ -122,3 +122,12 @@ def RULE110():
     return BooleanNode.from_output_list(
         outputs=[0, 1, 1, 1, 0, 1, 1, 0], name="RULE 110"
     )
+
+def GP():
+    """Genetic Programming derivedd DCT rule.
+    See: Andre, D., Bennett III, F. H., and Koza, J. R. (1996). Discovery by genetic programming of a cellular automata rule that is better than any known rule for the majority classification problem. Genetic programming, 96:3–11.
+
+    """
+    return BooleanNode.from_output_list(
+        outputs="00000101000000000101010100000101000001010000000001010101000001010101010111111111010101011111111101010101111111110101010111111111", name="GP"
+    )

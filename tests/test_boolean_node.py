@@ -3,7 +3,9 @@
 # Tests for ``boolean_node.py``
 # These tests were manually calculated by Luis M. Rocha and implemented by Rion B. Correia.
 #
-from cana.datasets.bools import CONTRADICTION, AND, OR, XOR, COPYx1, RULE90, RULE110
+import pytest
+
+from cana.datasets.bools import CONTRADICTION, AND, OR, XOR, COPYx1, RULE90, RULE110, GP
 from cana.utils import isclose, fill_out_lut
 from cana.boolean_node import BooleanNode
 
@@ -920,3 +922,124 @@ def test_generate_with_required_node_bias():
         #     print("No match found")
 
         assert automata_output_list[automata] in list_of_output_lists, "No match found"
+
+
+@pytest.fixture
+def annigen_node():
+    return BooleanNode.from_output_list([1] + [0] * 15)
+
+
+@pytest.fixture
+def gp_node():
+    return GP()
+
+
+def test_get_annihilation_generation_rules_wildcard(annigen_node):
+    anni, gen = annigen_node.get_annihilation_generation_rules(split=True)
+    assert anni == [("###1", 0)]
+    assert gen == [("0000", 1)]
+    combined = annigen_node.get_annihilation_generation_rules()
+    assert combined == [("###1", 0), ("0000", 1)]
+
+
+def test_get_annihilation_generation_rules_two_symbol(annigen_node):
+    anni, gen = annigen_node.get_annihilation_generation_rules(type="ts", split=True)
+    assert anni == [["###1", []]]
+    assert gen == [["0000", []]]
+
+
+def test_get_anni_gen_coverage_wildcard(annigen_node):
+    coverage = annigen_node.get_anni_gen_coverage()
+    expected_non_empty = {
+        "0000": {"0000"},
+        "0001": {"###1"},
+        "0011": {"###1"},
+        "0101": {"###1"},
+        "0111": {"###1"},
+        "1001": {"###1"},
+        "1011": {"###1"},
+        "1101": {"###1"},
+        "1111": {"###1"},
+    }
+    for key, value in expected_non_empty.items():
+        assert coverage[key] == value
+    for key, value in coverage.items():
+        if key not in expected_non_empty:
+            assert value == set()
+
+
+def test_get_anni_gen_coverage_two_symbol(annigen_node):
+    coverage = annigen_node.get_anni_gen_coverage(type="ts")
+    expected = {
+        "0000": [["0000", [], [[0, 1, 2, 3]]]],
+        "0001": [["2221", [], [[0, 1, 2]]]],
+        "0011": [["2221", [], [[0, 1, 2]]]],
+        "0101": [["2221", [], [[0, 1, 2]]]],
+        "0111": [["2221", [], [[0, 1, 2]]]],
+        "1001": [["2221", [], [[0, 1, 2]]]],
+        "1011": [["2221", [], [[0, 1, 2]]]],
+        "1101": [["2221", [], [[0, 1, 2]]]],
+        "1111": [["2221", [], [[0, 1, 2]]]],
+    }
+    for key, value in expected.items():
+        assert coverage[key] == value
+    for key, value in coverage.items():
+        if key not in expected:
+            assert value == []
+
+
+def test_input_symmetry_mean_anni_gen(annigen_node):
+    assert annigen_node.input_symmetry_mean_anni_gen() == 0.0
+    assert annigen_node.input_symmetry_mean_anni_gen(norm=True) == 0.0
+
+
+def test_input_redundancy_anni_gen(annigen_node):
+    assert annigen_node.input_redundancy_anni_gen() == pytest.approx(8 / 3)
+    assert annigen_node.input_redundancy_anni_gen(norm=True) == pytest.approx(2 / 3)
+
+
+def test_effective_connectivity_anni_gen(annigen_node):
+    assert annigen_node.effective_connectivity_anni_gen() == pytest.approx(4 / 3)
+    assert annigen_node.effective_connectivity_anni_gen(norm=True) == pytest.approx(1 / 3)
+
+
+def test_get_annihilation_generation_rules_wildcard_gp(gp_node):
+    anni, gen = gp_node.get_annihilation_generation_rules(split=True)
+    assert set(anni) == {("0##10##", 0), ("0#01###", 0), ("0##1##0", 0)}
+    assert set(gen) == {("1##0##1", 1), ("##10##1", 1), ("###01#1", 1)}
+
+
+def test_get_annihilation_generation_rules_two_symbol_gp(gp_node):
+    anni, gen = gp_node.get_annihilation_generation_rules(type="ts", split=True)
+    assert anni == [["0#01###", [[2, 4, 6]]]]
+    assert gen == [["1##0##1", [[0, 2, 4]]]]
+
+
+def test_get_anni_gen_coverage_wildcard_gp(gp_node):
+    coverage = gp_node.get_anni_gen_coverage()
+    assert coverage["0001000"] == {"0##1##0", "0##10##", "0#01###"}
+    assert coverage["0011110"] == {"0##1##0"}
+    assert coverage["0000101"] == {"###01#1"}
+    assert coverage["1111010"] == set()
+
+
+def test_get_anni_gen_coverage_two_symbol_gp(gp_node):
+    coverage = gp_node.get_anni_gen_coverage(type="ts")
+    assert coverage["0001000"] == [["0201222", [[2, 4, 6]], [[0, 2], [1, 4, 5, 6]]]]
+    assert coverage["0000101"] == [["1220221", [[0, 2, 4]], [[0, 6], [1, 2, 4, 5]]]]
+    assert coverage["1111010"] == []
+
+
+def test_input_symmetry_mean_anni_gen_gp(gp_node):
+    assert gp_node.input_symmetry_mean_anni_gen() == pytest.approx(3.0)
+    assert gp_node.input_symmetry_mean_anni_gen(norm=True) == pytest.approx(3.0 / 7.0)
+
+
+def test_input_redundancy_anni_gen_gp(gp_node):
+    assert gp_node.input_redundancy_anni_gen() == pytest.approx(4.0)
+    assert gp_node.input_redundancy_anni_gen(norm=True) == pytest.approx(4.0 / 7.0)
+
+
+def test_effective_connectivity_anni_gen_gp(gp_node):
+    assert gp_node.effective_connectivity_anni_gen() == pytest.approx(3.0)
+    assert gp_node.effective_connectivity_anni_gen(norm=True) == pytest.approx(3.0 / 7.0)

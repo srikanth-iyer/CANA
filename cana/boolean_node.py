@@ -15,7 +15,7 @@ Main class for Boolean node objects.
 #   MIT license.
 from __future__ import division
 
-from itertools import combinations, compress, product, permutations
+from itertools import combinations, compress, product
 from statistics import mean
 
 import networkx as nx
@@ -30,11 +30,16 @@ from cana.cutils import (
     outputs_to_binstates_of_given_type,
     statenum_to_binstate,
 )
+from cana.cboolean_node import (
+    input_symmetry_mean_annigen_fast as _input_symmetry_mean_annigen_fast,
+    input_symmetry_mean_fast as _input_symmetry_mean_fast,
+)
+
 from cana.utils import input_monotone, ncr, fill_out_lut
 import random
 import warnings
 from math import comb, fsum
-from collections import deque, defaultdict
+from collections import defaultdict
 
 
 class BooleanNode(object):
@@ -408,15 +413,26 @@ class BooleanNode(object):
         """
         self._check_compute_canalization_variables(ts_coverage=True)
 
-        ts_values = self._ts_coverage.values()
-        numerator = 0.0
-        for f_theta in ts_values:
-            if not f_theta:
-                continue
-            f_len = len(f_theta)
-            inner = fsum(len(group) for ts in f_theta for group in ts[1])
-            numerator += inner / f_len
-        return numerator / (1 << self.k)
+        ts_coverage = self._ts_coverage
+        if not ts_coverage:
+            return 0.0
+
+        # if _input_symmetry_mean_fast is not None:
+        return _input_symmetry_mean_fast(ts_coverage, self.k)
+
+        # numerator = 0.0
+        # inv_total_states = 1.0 / (1 << self.k)
+
+        # for f_theta in ts_coverage.values():
+        #     if not f_theta:
+        #         continue
+        #     inv_len = 1.0 / len(f_theta)
+        #     total = 0
+        #     for ts in f_theta:
+        #         for group in ts[1]:
+        #             total += len(group)
+        #     numerator += total * inv_len
+        # return numerator * inv_total_states
 
     def look_up_table(self):
         """Returns the Look Up Table (LUT)
@@ -1469,17 +1485,20 @@ class BooleanNode(object):
 
         """
         ts_coverage = self.get_anni_gen_coverage(type="ts")
-        coverage_values = [f_theta for f_theta in ts_coverage.values() if f_theta]
+        # if _input_symmetry_mean_annigen_fast is not None:
+        result = _input_symmetry_mean_annigen_fast(ts_coverage)
+        # else:
+        #     coverage_values = [f_theta for f_theta in ts_coverage.values() if f_theta]
 
-        if not coverage_values:
-            return 0.0
+        #     if not coverage_values:
+        #         return 0.0
 
-        summand = fsum(
-            fsum(len(group) for ts in f_theta for group in ts[1]) / len(f_theta)
-            for f_theta in coverage_values
-        )
+        #     summand = fsum(
+        #         fsum(len(group) for ts in f_theta for group in ts[1]) / len(f_theta)
+        #         for f_theta in coverage_values
+        #     )
 
-        result = summand / len(coverage_values)
+        #     result = summand / len(coverage_values)
         if norm:
             return result / self.k
         return result
@@ -1575,66 +1594,67 @@ class BooleanNode(object):
             Computes which LUT entries are covered by the two-symbol schemata of the annihilation and generation functions.
             """
 
-            def _expand_schema(line: str) -> list:
-                def _insert_char(la, lb):
-                    return "".join([la[i] + lb[i] for i in range(len(lb))] + [la[-1]])
-
-                chunks = line.split("2")
-                if len(chunks) > 1:
-                    return [
-                        _insert_char(chunks, i)
-                        for i in product(*[("0", "1")] * (len(chunks) - 1))
-                    ]
-                return [line]
-
-            def _expand_ts_logic(two_symbols, permut_indexes):
-                if isinstance(two_symbols, str):
-                    initial = [list(two_symbols)]
-                else:
-                    initial = [list(ts) for ts in two_symbols]
-
-                seen = set()
-                expanded = []
-                Q = deque(initial)
-
-                while Q:
-                    implicant = Q.pop()
-                    key = tuple(implicant)
-                    if key in seen:
+            def _normalize_ts_entries(entries):
+                normalized = []
+                local_seen = set()
+                for entry in entries:
+                    if not entry or len(entry) < 2:
                         continue
-                    seen.add(key)
-                    expanded.append(implicant)
+                    schema = entry[0]
+                    permutable = entry[1]
+                    if permutable:
+                        permutable_lists = [list(group) for group in permutable]
+                    else:
+                        permutable_lists = []
+                    same_symbols = entry[2] if len(entry) > 2 else []
+                    if same_symbols:
+                        same_symbol_lists = [list(group) for group in same_symbols]
+                    else:
+                        same_symbol_lists = []
+                    key = (
+                        schema,
+                        tuple(tuple(group) for group in permutable_lists),
+                        tuple(tuple(group) for group in same_symbol_lists),
+                    )
+                    if key in local_seen:
+                        continue
+                    local_seen.add(key)
+                    normalized.append((key, [schema, permutable_lists, same_symbol_lists]))
+                return normalized
 
-                    for idxs in permut_indexes:
-                        values = [implicant[idx] for idx in idxs]
-                        for vals in permutations(values, len(idxs)):
-                            candidate = implicant.copy()
-                            for idx, val in zip(idxs, vals):
-                                candidate[idx] = val
-                            cand_key = tuple(candidate)
-                            if cand_key not in seen:
-                                Q.append(candidate)
+            def _filter_ts_coverage(node: BooleanNode) -> dict:
+                node_coverage = node.ts_coverage()
+                outputs = node.outputs
+                filtered = {}
+                for state, entries in node_coverage.items():
+                    if not entries:
+                        continue
+                    if outputs[binstate_to_statenum(state)] != "1":
+                        continue
+                    normalized = _normalize_ts_entries(entries)
+                    if normalized:
+                        filtered[state] = normalized
+                return filtered
 
-                return expanded
-
-            generation._check_compute_canalization_variables(two_symbols=True)
-            annihilation._check_compute_canalization_variables(two_symbols=True)
-
-            tsa = annihilation._two_symbols[1]
-            tsg = generation._two_symbols[1]
+            ann_cov = _filter_ts_coverage(annihilation)
+            gen_cov = _filter_ts_coverage(generation)
 
             ts_coverage = defaultdict(list)
-            for row in tsa + tsg:
-                expanded_ts_schema = (
-                    _expand_ts_logic(row[0], row[1]) if row[1] else [row[0]]
-                )  # if there are no permutable indexes, then the schema is already expanded
-                for ts_schema in expanded_ts_schema:
-                    for schema in _expand_schema("".join(ts_schema)):
-                        existing = ts_coverage[schema]
-                        if row not in existing:
-                            existing.append(row)
-            for state in (str(bin(i)[2:].zfill(k)) for i in range(2**k)):
+            seen_entries = defaultdict(set)
+
+            for source in (ann_cov, gen_cov):
+                for state, normalized_entries in source.items():
+                    existing = ts_coverage[state]
+                    seen = seen_entries[state]
+                    for key, value in normalized_entries:
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        existing.append(value)
+
+            for state in (statenum_to_binstate(i, base=k) for i in range(2**k)):
                 ts_coverage.setdefault(state, [])
+
             return dict(ts_coverage)
 
         if type == "wildcard":

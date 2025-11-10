@@ -20,6 +20,11 @@ import numpy as np
 import schematodes as sc
 
 from ..cutils import binstate_to_density, statenum_to_binstate
+from .cboolean_canalization import (
+    expand_ts_logic_fast as _expand_ts_logic_fast,
+    pi_covers_fast as _pi_covers_fast,
+    ts_covers_fast as _ts_covers_fast,
+)
 
 __author__ = """\n""".join(
     [
@@ -140,23 +145,26 @@ def _adjacent(imp1, imp2):
     return "".join(match)
 
 
-def __pi_covers(implicant, input, symbol=["2", "#", 2]):
+def __pi_covers(implicant, binstate, symbol=["2", "#", 2]):
     """Determines if a minterm is covered by a specific implicant.
 
     Args:
         implicant (string): the implicant.
-        minterm (string): the minterm.
+        binstate (string): the minterm.
 
     Returns:
         x (bool): True if covered else False.
 
     """
-    for i, m in zip(implicant, input):
-        if i in symbol:
-            continue
-        if int(i) != int(m):
-            return False
-    return True
+    # if _pi_covers_fast is not None:
+    return _pi_covers_fast(implicant, binstate)
+
+    # for i, m in zip(implicant, binstate):
+    #     if i in symbol:
+    #         continue
+    #     if int(i) != int(m):
+    #         return False
+    # return True
 
 
 def computes_pi_coverage(k, outputs, prime_implicants):
@@ -279,27 +287,29 @@ def _expand_ts_logic(two_symbols, permut_indexes):
     Returns:
         (list) : a list of :math:`F'` covered by this Two-Symbol.
     """
-    # If receiving a binary string, convert to list of lists
-    if isinstance(two_symbols, str):
-        two_symbols = [list(two_symbols)]
-    # Queue
-    Q = deque()
-    Q.extend(two_symbols)
-    logics = []
-    #
-    while Q:
-        implicant = np.array(Q.pop())
-        for idxs in permut_indexes:
-            # Permutation of all possible combinations of the values that are permutable.
-            for vals in itertools.permutations(implicant[idxs], len(idxs)):
-                # Generate a new schema
-                _implicant = np.copy(implicant)
-                _implicant[idxs] = vals
-                # Insert to list of logics if not already there
-                if _implicant.tolist() not in logics:
-                    logics.append(_implicant.tolist())
-                    Q.append(_implicant.tolist())
-    return logics
+    # if _expand_ts_logic_fast is not None:
+    return _expand_ts_logic_fast(two_symbols, permut_indexes)
+    # # If receiving a binary string, convert to list of lists
+    # if isinstance(two_symbols, str):
+    #     two_symbols = [list(two_symbols)]
+    # # Queue
+    # Q = deque()
+    # Q.extend(two_symbols)
+    # logics = []
+    # #
+    # while Q:
+    #     implicant = np.array(Q.pop())
+    #     for idxs in permut_indexes:
+    #         # Permutation of all possible combinations of the values that are permutable.
+    #         for vals in itertools.permutations(implicant[idxs], len(idxs)):
+    #             # Generate a new schema
+    #             _implicant = np.copy(implicant)
+    #             _implicant[idxs] = vals
+    #             # Insert to list of logics if not already there
+    #             if _implicant.tolist() not in logics:
+    #                 logics.append(_implicant.tolist())
+    #                 Q.append(_implicant.tolist())
+    # return logics
 
 
 def _check_schemata_permutations(schema, perm_groups, verbose=None, verbose_level=None):
@@ -466,33 +476,35 @@ def _ts_covers(two_symbol, permut_indexes, input, verbose=False):
     """
     if verbose:
         print("Evaluating permutation coverage")
-    # No permutation, just plain implicant coverage?
-    if not len(permut_indexes):
-        if __pi_covers(two_symbol, input):
-            return True
-    # There are permutations to generate and check
-    else:
-        # NEW METHOD: Generates the expanded logic of the Two-Symbol Schema
-        for gen_implicant in _expand_ts_logic(two_symbol, permut_indexes):
-            if __pi_covers(gen_implicant, input):
-                return True
-        """
-        # OLD METHOD
-        for idxs in permut_indexes:
-            # Extract the charactes that can be permuted
-            chars = [implicant[idx] for idx in idxs]
-            # Generate all possible permutations of these symbols
-            permut_chars = itertools.permutations(chars, len(idxs))
-            for permut_chars in permut_chars:
-                # Generate a new implicant and substitute the charactes with the permuted ones
-                tmp = list(implicant)
-                for idx,char in zip(idxs,permut_chars):
-                    tmp[idx] = char
-                # The new permuted implicate is covered?
-                if __pi_covers(tmp, input):
-                    return True
-        """
-    return False
+    # if _ts_covers_fast is not None:
+    return _ts_covers_fast(two_symbol, permut_indexes, input)
+    # # No permutation, just plain implicant coverage?
+    # if not len(permut_indexes):
+    #     if __pi_covers(two_symbol, input):
+    #         return True
+    # # There are permutations to generate and check
+    # else:
+    #     # NEW METHOD: Generates the expanded logic of the Two-Symbol Schema
+    #     for gen_implicant in _expand_ts_logic(two_symbol, permut_indexes):
+    #         if __pi_covers(gen_implicant, input):
+    #             return True
+    #     """
+    #     # OLD METHOD
+    #     for idxs in permut_indexes:
+    #         # Extract the charactes that can be permuted
+    #         chars = [implicant[idx] for idx in idxs]
+    #         # Generate all possible permutations of these symbols
+    #         permut_chars = itertools.permutations(chars, len(idxs))
+    #         for permut_chars in permut_chars:
+    #             # Generate a new implicant and substitute the charactes with the permuted ones
+    #             tmp = list(implicant)
+    #             for idx,char in zip(idxs,permut_chars):
+    #                 tmp[idx] = char
+    #             # The new permuted implicate is covered?
+    #             if __pi_covers(tmp, input):
+    #                 return True
+    #     """
+    # return False
 
 
 def computes_ts_coverage(k, outputs, two_symbols):

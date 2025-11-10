@@ -12,6 +12,7 @@ def readme():
 # ext_modules = ["cana/cutils.pyx", "cana/canalization/cboolean_canalization.pyx"]
 extensions = [
     Extension("cana.cutils", ["cana/cutils.c"]),
+    Extension("cana.cboolean_node", ["cana/cboolean_node.c"]),
     Extension(
         "cana.canalization.cboolean_canalization",
         ["cana/canalization/cboolean_canalization.c"],
@@ -42,10 +43,10 @@ setup(
     license="MIT",
     packages=find_packages(),
     package_data={
-        "datasets": [
-            "cana.datasets/*.txt",
-            "cana.datasets/bns/*.cnet",
-            "cana.datasets/cell_collective/*.txt",
+        "cana.datasets": [
+            "*.txt",
+            "bns/*.cnet",
+            "cell_collective/*.txt",
         ],
     },
     install_requires=[

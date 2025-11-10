@@ -12,6 +12,8 @@ Functions to compute the Quine-McCluskey algorithm in cython for increaed comput
 #
 #   All rights reserved.
 #   MIT license.
+import cython
+
 from cana.cutils import *
 
 WILDCARD_SYMBOL = '#'
@@ -134,16 +136,180 @@ def find_implicants_qm(input_binstates, verbose=False):
     return prime_implicants
 
 
-def __pi_covers(implicant, binstate):
-    """Determines if a binarystate is covered by a specific implicant.
-    Args:
-        implicant (string): the implicant.
-        minterm (string): the minterm.
-    Returns:
-        x (bool): True if covered else False.
+@cython.cfunc
+cdef inline bint _is_wildcard_symbol(object symbol):
+    return (
+        symbol == WILDCARD_SYMBOL
+        or symbol == SYMMETRIC_WILDCARD_SYMBOL
+        or symbol == '2'
+        or symbol == 2
+    )
 
-    """
-    return all(i == WILDCARD_SYMBOL or m == i for i, m in zip(implicant, input))
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef bint pi_covers_fast(object implicant, object binstate):
+    """Fast coverage check for wildcard schemata."""
+    cdef list imp_list
+    cdef Py_ssize_t i, n
+    cdef object symbol
+    cdef str binstate_str = <str>binstate
+
+    if isinstance(implicant, str):
+        imp_list = list(implicant)
+    else:
+        imp_list = [x for x in implicant]
+
+    n = len(imp_list)
+    if len(binstate_str) != n:
+        raise ValueError("Implicant and binstate must have the same length")
+
+    for i in range(n):
+        symbol = imp_list[i]
+        if symbol == binstate_str[i]:
+            continue
+        if _is_wildcard_symbol(symbol):
+            continue
+        return False
+    return True
+
+
+@cython.cfunc
+cdef list _normalize_index_groups(object groups):
+    if not groups:
+        return []
+    cdef list normalized = []
+    cdef object group
+    cdef object idx
+    for group in groups:
+        if not group:
+            normalized.append([])
+            continue
+        normalized.append([int(idx) for idx in group])
+    return normalized
+
+
+@cython.cfunc
+cdef list _init_implicant_stack(object two_symbol):
+    cdef list stack = []
+    cdef object item
+    if isinstance(two_symbol, str):
+        stack.append(list(two_symbol))
+    else:
+        for item in two_symbol:
+            if isinstance(item, str):
+                stack.append(list(item))
+            else:
+                stack.append([c for c in item])
+    return stack
+
+
+@cython.cfunc
+cdef void _permute_assign(
+    list base_implicant,
+    list idxs,
+    list chars,
+    Py_ssize_t pos,
+    Py_ssize_t n,
+    list stack,
+    set seen,
+):
+    cdef Py_ssize_t i
+    cdef object tmp
+    cdef dict used
+
+    if pos == n:
+        new_implicant = base_implicant[:]
+        for i in range(n):
+            new_implicant[idxs[i]] = chars[i]
+        tmp = tuple(new_implicant)
+        if tmp not in seen:
+            stack.append(new_implicant)
+        return
+
+    used = {}
+    for i in range(pos, n):
+        tmp = chars[i]
+        if tmp in used:
+            continue
+        used[tmp] = None
+        chars[pos], chars[i] = chars[i], chars[pos]
+        _permute_assign(base_implicant, idxs, chars, pos + 1, n, stack, seen)
+        chars[pos], chars[i] = chars[i], chars[pos]
+
+
+@cython.cfunc
+cdef void _enqueue_permutations(list base_implicant, list idxs, list stack, set seen):
+    cdef Py_ssize_t n = len(idxs)
+    if n <= 1:
+        return
+    chars = [base_implicant[i] for i in idxs]
+    _permute_assign(base_implicant, idxs, chars, 0, n, stack, seen)
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef list expand_ts_logic_fast(object two_symbols, object permut_indexes):
+    """Generate all permutations for two-symbol schemata groups."""
+    cdef list idx_groups = _normalize_index_groups(permut_indexes)
+    if not idx_groups:
+        return _init_implicant_stack(two_symbols)
+
+    cdef list stack = _init_implicant_stack(two_symbols)
+    cdef list results = []
+    cdef set seen = set()
+    cdef list implicant
+    cdef tuple key
+    cdef list idxs
+
+    while stack:
+        implicant = <list>stack.pop()
+        key = tuple(implicant)
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(list(implicant))
+        for idxs in idx_groups:
+            if not idxs:
+                continue
+            _enqueue_permutations(implicant, idxs, stack, seen)
+
+    return results
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef bint ts_covers_fast(object two_symbol, object permut_indexes, object binstate):
+    """Fast coverage test for two-symbol schemata with permutations."""
+    cdef list idx_groups = _normalize_index_groups(permut_indexes)
+    if not idx_groups:
+        return pi_covers_fast(two_symbol, binstate)
+
+    cdef list stack = _init_implicant_stack(two_symbol)
+    cdef set seen = set()
+    cdef list implicant
+    cdef tuple key
+    cdef list idxs
+
+    while stack:
+        implicant = <list>stack.pop()
+        key = tuple(implicant)
+        if key in seen:
+            continue
+        seen.add(key)
+        if pi_covers_fast(implicant, binstate):
+            return True
+        for idxs in idx_groups:
+            if not idxs:
+                continue
+            _enqueue_permutations(implicant, idxs, stack, seen)
+
+    return False
+
+
+def __pi_covers(implicant, binstate):
+    """Determine if a binarystate is covered by a specific implicant."""
+    return pi_covers_fast(implicant, binstate)
 
 
 def expand_wildcard_schemata(schemata):

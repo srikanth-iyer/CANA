@@ -1440,6 +1440,10 @@ class BooleanNode(object):
                 anni_schemata.append((item, 0))
             for item in pig:
                 gen_schemata.append((item, 1))
+            # Sort for deterministic output: upstream prime implicants come from a set,
+            # whose iteration order varies per process (hash randomization).
+            anni_schemata = sorted(anni_schemata)
+            gen_schemata = sorted(gen_schemata)
             if split:
                 return anni_schemata, gen_schemata
             return anni_schemata + gen_schemata
@@ -1471,6 +1475,10 @@ class BooleanNode(object):
             # keep only schemata inputs and the two symbol indices for each row
             tsa = [sublist[:2] for sublist in tsa]
             tsg = [sublist[:2] for sublist in tsg]
+            # Sort for deterministic output: upstream two-symbol schemata derive from a
+            # set, whose iteration order varies per process (hash randomization).
+            tsa = sorted(tsa, key=str)
+            tsg = sorted(tsg, key=str)
             if split:
                 return tsa, tsg
             return tsa + tsg

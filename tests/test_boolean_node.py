@@ -1005,14 +1005,57 @@ def test_effective_connectivity_anni_gen(annigen_node):
 
 def test_get_annihilation_generation_rules_wildcard_gp(gp_node):
     anni, gen = gp_node.get_annihilation_generation_rules(split=True)
-    assert set(anni) == {("0##10##", 0), ("0#01###", 0), ("0##1##0", 0)}
-    assert set(gen) == {("1##0##1", 1), ("##10##1", 1), ("###01#1", 1)}
+    # The output must be in a fixed (sorted) order, not just a stable set, so
+    # that results are reproducible across processes (see determinism test below).
+    assert anni == [("0##1##0", 0), ("0##10##", 0), ("0#01###", 0)]
+    assert gen == [("###01#1", 1), ("##10##1", 1), ("1##0##1", 1)]
+    combined = gp_node.get_annihilation_generation_rules()
+    assert combined == anni + gen
 
 
 def test_get_annihilation_generation_rules_two_symbol_gp(gp_node):
     anni, gen = gp_node.get_annihilation_generation_rules(type="ts", split=True)
     assert anni == [["0#01###", [[2, 4, 6]]]]
     assert gen == [["1##0##1", [[0, 2, 4]]]]
+
+
+def test_get_annihilation_generation_rules_deterministic_across_hashseeds():
+    """The rules are derived from upstream sets (prime implicants / two-symbol
+    schemata) whose iteration order is randomized per process via PYTHONHASHSEED.
+    The method sorts its results, so the output must be identical regardless of
+    the hash seed. Run the method in fresh subprocesses with different seeds and
+    confirm the (ordered) output matches byte-for-byte.
+    """
+    import os
+    import subprocess
+    import sys
+
+    snippet = (
+        "from cana.datasets.bools import GP\n"
+        "node = GP()\n"
+        "out = []\n"
+        "for typ in ('wildcard', 'ts'):\n"
+        "    for split in (True, False):\n"
+        "        out.append(repr(node.get_annihilation_generation_rules(type=typ, split=split)))\n"
+        "print(chr(10).join(out))\n"
+    )
+
+    outputs = []
+    for seed in ("0", "1", "2", "3"):
+        env = dict(os.environ, PYTHONHASHSEED=seed)
+        result = subprocess.run(
+            [sys.executable, "-c", snippet],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        outputs.append(result.stdout)
+
+    # Every seed must produce byte-for-byte identical (ordered) output.
+    assert len(set(outputs)) == 1, (
+        "Output varied across PYTHONHASHSEED values:\n" + "\n---\n".join(outputs)
+    )
 
 
 def test_get_anni_gen_coverage_wildcard_gp(gp_node):

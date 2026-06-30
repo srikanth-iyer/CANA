@@ -38,6 +38,9 @@ Docs:
 -------
 
 The full documentation can be found at: [casci-lab.github.io/CANA/](https://casci-lab.github.io/CANA/)
+Plotting helpers are described in the [drawing reference](https://casci-lab.github.io/CANA/reference/drawing.html);
+install the Graphviz system package alongside the Python ``graphviz`` module
+before using these functions.
 
 
 Papers:

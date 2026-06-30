@@ -13,6 +13,7 @@ Functions to compute the Quine-McCluskey algorithm.
 #   All rights reserved.
 #   MIT license.
 
+import copy
 import itertools
 from collections import deque
 
@@ -20,6 +21,12 @@ import numpy as np
 import schematodes as sc
 
 from ..cutils import binstate_to_density, statenum_to_binstate
+
+# Module-level memoization cache for `find_two_symbols_v2`. Many nodes in a
+# network (especially biological models) share identical logic, so the same
+# (k, prime_implicants) pair recurs across nodes and across the two output
+# values within a node. Keyed on (k, frozenset(prime_implicants)).
+_TWO_SYMBOLS_CACHE = {}
 
 __author__ = """\n""".join(
     [
@@ -215,12 +222,21 @@ def find_two_symbols_v2(k=1, prime_implicants=None, verbose=False, verbose_level
     if not prime_implicants:
         return []
 
+    # Memoization: identical (k, prime_implicants) pairs recur across nodes and
+    # across the two output values of a single node. Return a deep copy so that
+    # callers mutating the returned lists cannot corrupt the cached value.
+    cache_key = (k, frozenset(prime_implicants))
+    cached = _TWO_SYMBOLS_CACHE.get(cache_key)
+    if cached is not None:
+        return copy.deepcopy(cached)
+
     # If this node has no input, yet it affects other nodes (fixed variable)
     if k == 0:
         TSf = []
         for pi in prime_implicants:
             TSf.append((pi, [], []))
-        return TSf
+        _TWO_SYMBOLS_CACHE[cache_key] = TSf
+        return copy.deepcopy(TSf)
 
     prime_implicants = [[int(c) for c in pi] for pi in prime_implicants]
     tss = sc.schemer(prime_implicants, max_symbol=2)
@@ -228,14 +244,17 @@ def find_two_symbols_v2(k=1, prime_implicants=None, verbose=False, verbose_level
     for c in tss:
         representative = c.redescribed_schemata[0]
         bubble_indices = c.bubble_indices
-        same_symbols_all = [
-            [i for i, _ in enumerate(representative) if representative[i] == x]
-            for x in [0, 1, 2]
-        ]
-        same_symbols = [x for x in same_symbols_all if len(x) > 1]
+        # Single pass: bucket each index by its symbol value (0, 1 or 2),
+        # then keep only the groups with more than one index.
+        buckets = {0: [], 1: [], 2: []}
+        for i, x in enumerate(representative):
+            buckets[x].append(i)
+        same_symbols = [buckets[x] for x in (0, 1, 2) if len(buckets[x]) > 1]
         representative_str = "".join(map(str, representative))
         TSf.append([representative_str, bubble_indices, same_symbols])
-    return TSf
+
+    _TWO_SYMBOLS_CACHE[cache_key] = TSf
+    return copy.deepcopy(TSf)
 
 
 def _calc_ts_complexity(tss, pers):
@@ -286,6 +305,9 @@ def _expand_ts_logic(two_symbols, permut_indexes):
     Q = deque()
     Q.extend(two_symbols)
     logics = []
+    # `seen` mirrors `logics` for O(1) membership testing (tuples are hashable),
+    # replacing the previous O(n) list-membership scan that made this O(E^2).
+    seen = set()
     #
     while Q:
         implicant = np.array(Q.pop())
@@ -295,10 +317,13 @@ def _expand_ts_logic(two_symbols, permut_indexes):
                 # Generate a new schema
                 _implicant = np.copy(implicant)
                 _implicant[idxs] = vals
+                _implicant_list = _implicant.tolist()
+                _implicant_key = tuple(_implicant_list)
                 # Insert to list of logics if not already there
-                if not (_implicant.tolist() in logics):
-                    logics.append(_implicant.tolist())
-                    Q.append(_implicant.tolist())
+                if _implicant_key not in seen:
+                    seen.add(_implicant_key)
+                    logics.append(_implicant_list)
+                    Q.append(_implicant_list)
     return logics
 
 
@@ -495,6 +520,29 @@ def _ts_covers(two_symbol, permut_indexes, input, verbose=False):
     return False
 
 
+def _minterms_of(implicant):
+    """Enumerate the state numbers (minterms) covered by a concrete implicant.
+
+    Fixed positions (``0``/``1``) are pinned; each don't-care position
+    (``2``/``#``) ranges over ``{0, 1}``. Because ``statenum_to_binstate`` is
+    MSB-first, the generated binary string maps back to its state number via
+    ``int(binstate, 2)``.
+
+    Args:
+        implicant : a schema as a string (e.g. ``"201"``) or a list of symbols.
+
+    Yields:
+        int : the state numbers covered by the implicant.
+    """
+    chars = [str(c) for c in implicant]
+    free = [i for i, c in enumerate(chars) if c in ("2", "#")]
+    base = ["0" if c in ("2", "#") else c for c in chars]
+    for combo in itertools.product("01", repeat=len(free)):
+        for pos, val in zip(free, combo):
+            base[pos] = val
+        yield int("".join(base), 2)
+
+
 def computes_ts_coverage(k, outputs, two_symbols):
     """Computes the input coverage by Two Symbol schematas.
 
@@ -506,20 +554,38 @@ def computes_ts_coverage(k, outputs, two_symbols):
     Returns:
         coverage (dict): a dictionary of coverage where keys are inputs states and values are lists of the Two Symbols covering that input.
     """
-    ts_coverage = {}
-    for statenum in range(2**k):
-        binstate = statenum_to_binstate(statenum, base=k)
-        ts_coverage[binstate] = covering_twosymbols = []
-        output = int(outputs[statenum])
-        if output == 2:
-            output = [0, 1]
-        else:
-            output = [int(outputs[statenum])]
-        for t in output:
-            for implicant, permut_indxs, same_symbols_indxs in two_symbols[t]:
-                if _ts_covers(implicant, permut_indxs, binstate):
-                    covering_twosymbols.append(
-                        (implicant, permut_indxs, same_symbols_indxs)
-                    )
+    # Pre-seed all keys in ascending state-number order so the resulting dict
+    # has the exact same key order (and includes uncovered states) as the
+    # original per-state implementation.
+    binstates = [statenum_to_binstate(statenum, base=k) for statenum in range(2**k)]
+    ts_coverage = {binstate: [] for binstate in binstates}
+
+    # Integer transition for each state, supporting DontCare (2).
+    out_ints = [int(o) for o in outputs]
+
+    # Loop inversion: instead of re-expanding every schema for every one of the
+    # 2**k states, expand each schema ONCE and mark the states (minterms) it
+    # covers directly. Iterating `t` ascending then schemas in list order
+    # reproduces the original per-state value ordering of `(output_value,
+    # schema_index)`, since each (t, schema) appends to a given state at most
+    # once (the union below mirrors the original short-circuit on first match).
+    for t in (0, 1):
+        for implicant, permut_indxs, same_symbols_indxs in two_symbols[t]:
+            if permut_indxs:
+                concrete_implicants = _expand_ts_logic(implicant, permut_indxs)
+            else:
+                concrete_implicants = [implicant]
+            # Union of all minterms covered by any permuted variant of this
+            # schema, so a state receives at most one tuple per (t, schema).
+            covered_statenums = set()
+            for concrete in concrete_implicants:
+                covered_statenums.update(_minterms_of(concrete))
+            entry = (implicant, permut_indxs, same_symbols_indxs)
+            for statenum in covered_statenums:
+                # Only contribute to states whose transition includes `t`
+                # (i.e. output == t, or DontCare). Matches the original gating
+                # of only checking two_symbols[t] for such states.
+                if out_ints[statenum] == t or out_ints[statenum] == 2:
+                    ts_coverage[binstates[statenum]].append(entry)
     #
     return ts_coverage

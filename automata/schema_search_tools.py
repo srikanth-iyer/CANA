@@ -389,7 +389,7 @@ def shuffle_and_generate(
                 # combining the shuffled schemata with the annihilation generation rules doesn't preserve the annihilation generation rules in the current version of the code.
                 combo = (
                     anni_gen_schemata + shuffled_schemata
-                )  # put anni_gen first because clashing outputs will prefer the first one. this will prefer annihilation generation in the shuffled nodes.
+                )  # NOTE: with fill_clashes=True, fill_out_lut resolves a clash in favour of the LATER entry, so where anni_gen and the shuffled schemata disagree the shuffled schemata win. (This is the opposite of the previous comment here, which wrongly claimed the first entry wins -- flagged in case anni_gen was actually meant to be preserved.)
                 shuffled_node = BooleanNode.from_partial_lut(
                     combo, fill_clashes=True, fill_missing_output_randomly=True
                 )

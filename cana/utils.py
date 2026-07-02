@@ -329,87 +329,139 @@ def input_monotone(outputs, input_idx, activation=1):
         return all(monotone_configs)
 
 
-def fill_out_lut(partial_lut: list, fill_clashes: bool = False, verbose: bool =False)->list:
-    """
-    Fill out a partial LUT with missing entries.
+# Sentinel marking a state whose output has not been provided (directly or via a
+# wildcard expansion). It is a unique object -- deliberately NOT the string '?' --
+# so that a partial-LUT entry that *explicitly* carries the value '?' stays
+# distinguishable from a genuinely-unspecified state during clash detection.
+_LUT_UNSET = object()
+
+# The characters that stand for a "don't care" position in a partial-LUT input.
+# One canonical set is used in every check below. Previously three separate
+# hard-coded lists disagreed about '2': it was accepted as valid and routed into
+# the wildcard branch but never actually expanded, which left spurious non-binary
+# keys (e.g. "12") in the output and dropped the coverage it should have added.
+# Using a single set makes '2' behave like the other wildcards.
+_LUT_WILDCARDS = frozenset("-#x2")
+_LUT_VALID_CHARS = frozenset("01-#x2")
+
+
+def fill_out_lut(partial_lut: list, fill_clashes: bool = False, verbose: bool = False) -> list:
+    """Expand a partial look-up table (LUT) into a complete one.
+
+    A *partial* LUT specifies the output for only some input states, and its input
+    patterns may contain wildcard characters (``-``, ``#``, ``x`` or ``2``) that each
+    stand for "either 0 or 1". This function expands every wildcard pattern into the
+    concrete input states it covers and returns the **full** LUT for all ``2**k``
+    input states (``k`` = length of the input patterns), sorted in ascending binary
+    order.
+
+    States that are never specified are filled with ``'?'``. When two entries assign
+    conflicting outputs to the same state it is marked ``'!'`` (a clash), unless
+    ``fill_clashes=True``, in which case the later conflicting entry's value is kept.
 
     Args:
-        partial_lut (list) : A list of tuples where each tuple is a pair of a binary string and a value.
-        fill_missing_output (bool) : If True, missing output values are filled with random 0 or 1. If False, missing output values are filled with '?'.
+        partial_lut (list): list of ``(input_pattern, output)`` pairs. Every
+            ``input_pattern`` is a string of the same length using the characters
+            ``0``, ``1`` or a wildcard (``-``, ``#``, ``x``, ``2``). ``output``
+            values are stored verbatim (commonly the strings ``'0'`` / ``'1'``).
+        fill_clashes (bool): if ``False`` (default) a conflicting state becomes
+            ``'!'``; if ``True`` the later conflicting entry's value overwrites the
+            earlier one and no ``'!'`` is emitted.
+        verbose (bool): if ``True`` print clash notices and whether the resulting LUT
+            is complete.
 
     Returns:
-        (list) : A list of tuples where each tuple is a pair of a binary string and a value.
+        list: ``(binstate, output)`` pairs for all ``2**k`` states, sorted by
+        ``binstate`` (ascending binary order); missing states are ``'?'`` and
+        clashes are ``'!'``.
+
+    Raises:
+        ValueError: if the input patterns are not all the same length, or contain a
+            character other than ``0``, ``1`` or a wildcard.
 
     Example:
-        >>> fill_out_lut([('00', 0), ('01', 0), ('1-', 1), ('11', 1)])
-        [('00', 0), ('01', 0), ('10', 1), ('11', 1)]
+        >>> fill_out_lut([('00', '0'), ('01', '0'), ('1-', '1'), ('11', '1')])
+        [('00', '0'), ('01', '0'), ('10', '1'), ('11', '1')]
 
     # TODO: [SRI] generate LUT from two symbol schemata, with a specified ratio of wildcard symbols
     """
-
-    # Check if all the input entries of the partial LUT are of the same length.
-    if len(set([len(x[0]) for x in partial_lut])) != 1:
+    # Every input pattern must share one length k, which defines the 2**k state
+    # space. An empty partial_lut produces an empty length-set, correctly failing here.
+    lengths = {len(pattern) for pattern, _ in partial_lut}
+    if len(lengths) != 1:
         raise ValueError(
             "All the input entries of the partial LUT must be of the same length."
         )
+    k = next(iter(lengths))
+    n_states = 1 << k  # == 2**k
 
-    k = len(partial_lut[0][0])
-
-    all_states = dict(partial_lut)
-
-    for entry in partial_lut:
-        if not all([x in ["0", "1", "-", "#", "2", "x"] for x in entry[0]]):
+    # Validate every character up front so an invalid pattern fails fast.
+    for pattern, _ in partial_lut:
+        if not all(c in _LUT_VALID_CHARS for c in pattern):
             raise ValueError(
                 "All the input entries of the partial LUT must be valid binary strings."
             )
 
-        elif any([x in ["-", "#", "2", "x"] for x in entry[0]]):
-            missing_data_indices = [
-                i for i, x in enumerate(entry[0]) if x in ["-", "#", "x"]
-            ]
-            table = []
-            output_list_permutations = []
+    # Dense table indexed by integer state number; _LUT_UNSET means "not yet set".
+    # Indexing by int(binstate, 2) lets us (a) expand wildcards with cheap integer
+    # bit math and (b) emit the result already in sorted order -- replacing the old
+    # per-bit string slicing and the final O(2**k log 2**k) sort.
+    table = [_LUT_UNSET] * n_states
 
-            for i in range(2 ** len(missing_data_indices)):
-                row = [int(x) for x in bin(i)[2:].zfill(len(missing_data_indices))]
-                table.append(row)
-                output_list_permutations.append(entry[0])
-                for j in range(len(missing_data_indices)):
-                    output_list_permutations[i] = (
-                        output_list_permutations[i][: missing_data_indices[j]]
-                        + str(table[i][j])
-                        + output_list_permutations[i][missing_data_indices[j] + 1 :]
-                    )
-            if entry[0] in all_states:
-                del all_states[entry[0]]
+    # Pass 1 -- concrete entries (no wildcards). Placing these first mirrors the old
+    # dict(partial_lut) behaviour: a fully-specified state is present before any
+    # wildcard expansion runs, and a later duplicate simply overwrites the earlier.
+    for pattern, value in partial_lut:
+        if not any(c in _LUT_WILDCARDS for c in pattern):
+            table[int(pattern, 2)] = value
 
-            for perm in output_list_permutations:
-                if perm in all_states and all_states[perm] != entry[1]:
-                    if verbose:
-                        print("Clashing output values for entry:", perm)
-                    if fill_clashes is False:
-                        all_states[perm] = "!"
-                    elif fill_clashes is True:
-                        all_states[perm] = entry[1]
-                    else:
-                        raise ValueError(
-                            "fill_clashes must be either True or False. Default is False."
-                        )
-                else:
-                    all_states[perm] = entry[1]
+    # Pass 2 -- wildcard entries, in list order, so clash resolution matches the
+    # original (a later conflicting entry wins as '!' -- or as its own value when
+    # fill_clashes=True).
+    for pattern, value in partial_lut:
+        wildcard_positions = [i for i, c in enumerate(pattern) if c in _LUT_WILDCARDS]
+        if not wildcard_positions:
+            continue  # concrete entry, already handled in pass 1
 
-    for i in range(2**k):
-        state = bin(i)[2:].zfill(k)
-        if state not in all_states:
-            all_states[state] = "?"
+        # `base` = the state number with every wildcard bit set to 0. Position i of
+        # the MSB-first pattern has integer weight 1 << (k - 1 - i).
+        base = 0
+        for i, c in enumerate(pattern):
+            if c == "1":
+                base |= 1 << (k - 1 - i)
+        # Integer weight contributed by each wildcard position.
+        weights = [1 << (k - 1 - i) for i in wildcard_positions]
+        m = len(wildcard_positions)
+
+        # Each of the 2**m subsets of the wildcard bits yields one covered state.
+        for combo in range(1 << m):
+            idx = base
+            for j in range(m):
+                if combo & (1 << j):
+                    idx |= weights[j]
+
+            current = table[idx]
+            if current is not _LUT_UNSET and current != value:
+                # State already holds a different specified value -> conflict.
+                if verbose:
+                    print("Clashing output values for state:", format(idx, "0{}b".format(k)))
+                table[idx] = value if fill_clashes else "!"
+            else:
+                table[idx] = value
+
+    # Build the full LUT. Ascending idx == ascending binstate, so no sort is needed;
+    # any state still UNSET is reported as the missing marker '?'. bin(idx)[2:].zfill
+    # is the fastest way to render the fixed-width binstate for every state.
+    filled_lut = [
+        (bin(idx)[2:].zfill(k), "?" if table[idx] is _LUT_UNSET else table[idx])
+        for idx in range(n_states)
+    ]
 
     if verbose:
-        # Print a statement if there are any missing values '?' in the LUT. Else print a statement that the LUT is complete.
-        if "?" in all_states.values():
+        # A LUT is incomplete if any state ended up as the missing marker '?'.
+        if any(value == "?" for _, value in filled_lut):
             print("The LUT is incomplete. Missing values are represented by '?'")
         else:
             print("The LUT is complete.")
 
-    all_states = sorted(all_states.items(), key=lambda x: x[0])
-
-    return all_states
+    return filled_lut

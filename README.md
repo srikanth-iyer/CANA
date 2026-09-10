@@ -10,29 +10,28 @@ If you use `cana` in your research, please cite us and check out our related pap
 
 - A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
 
-
+- R.B. Correia, A.J. Gates, X. Wang, L.M. Rocha [2018]. "[CANA: A python package for quantifying control and canalization in Boolean Networks](https://www.informatics.indiana.edu/rocha/publications/FSB18.php)". *Frontiers in Physiology*. **9**: 1046. doi: 10.3389/fphys.2018.01046
 
 Installation:
 -------------
 
-** Latest stable release **
-
-- from PYPI
+**Latest stable release**
 ```
     pip install cana
 ```
 
-** Latest development release on GitHub **
+**Manuscript-specific version**
+```
+    pip install cana=1.0.0
+```
 
-Pull and install the code directly from the github [project page](https://github.com/casci-lab/CANA).
-
+**Latest development release on GitHub**
 ```
     pip install git+https://github.com/CASCI-lab/CANA
 ```
 
 Please note that CANA uses Cython. For it to compile you may need to install the following:
-
-- `pip install Cython`
+```pip install Cython```
 
 Docs:
 -------
@@ -40,14 +39,14 @@ Docs:
 The full documentation can be found at: [casci-lab.github.io/CANA/](https://casci-lab.github.io/CANA/)
 
 
-Papers:
+Papers with the Theory, Formulations, and Analytical Examples:
 ---------
 
-- A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
+- F.X. Costa, J.C. Rozum, A.M. Marcus, L.M. Rocha [2023]. "[Effective Connectivity and Bias Entropy Improve Prediction of Dynamical Regime in Automata Networks](https://doi.org/10.3390/e25020374)". *Entropy*. 25(**2**):374. doi: 10.3390/e25020374.
+
+- S. Manicka, M. Marques-Pita, L.M. Rocha [2022]. "[Effective connectivity determines the critical dynamics of biochemical networks](https://doi.org/10.1098/rsif.2021.0659)". *Journal of the Royal Society Interface*. 19(**186**)20210659. doi: 10.1098/rsif.2021.0659.
 
 - A.J. Gates, R.B. Correia, X. Wang, L.M. Rocha [2021]. "[The effective graph reveals redundancy, canalization, and control pathways in biochemical regulation and signaling](https://doi.org/10.1073/pnas.2022598118)". *Proceedings of the National Academy of Sciences (PNAS)*. 118(**12**). doi: 10.1073/pnas.20225981186
-
-- R.B. Correia, A.J. Gates, X. Wang, L.M. Rocha [2018]. "[CANA: A python package for quantifying control and canalization in Boolean Networks](https://www.informatics.indiana.edu/rocha/publications/FSB18.php)". *Frontiers in Physiology*. **9**: 1046. doi: 10.3389/fphys.2018.01046
 
 - A. Gates and L.M. Rocha. [2016] "[Control of complex networks requires both structure and dynamics.](http://www.informatics.indiana.edu/rocha/publications/NSR16.php)" *Scientific Reports* **6**, 24456. doi: 10.1038/srep24456.
 
@@ -68,12 +67,13 @@ with the help of many others. Thanks to everyone who has improved ``CANA`` by co
 - [Rion Brattig Correia](http://alexandergates.net/), github: [rionbr](https://github.com/rionbr)
 - [Alexander Gates](https://alexandergates.net/), github: [ajgates42](https://github.com/ajgates42)
 
-
 **Contributors**
 
-Optionally, add your desired name and include a few relevant links. The order
-is an attempt at historical ordering.
-
+- Kyu Hyong Park, github: [kyuhyongpark](https://github.com/kyuhyongpark)
+- Yoshiaki Fujita, github: [yoshiakifujita](https://github.com/yoshiakifujita)
+- Jordan C. Rozum, github: [jcrozum](https://github.com/jcrozum)
+- Felipe Xavier Costa, github: [fxcosta-phd](https://github.com/fxcosta-phd)
+- Austin Marcus, github: [austin-marcus](https://github.com/austin-marcus)
 - [Xuan Wang](https://www.wangxuan.name), github: [xuan-w](https://github.com/xuan-w)
 - Thomas Parmer, github: [tjparmer](https://github.com/tjparmer)
 - Etienne Nzabarushimana
@@ -94,25 +94,17 @@ If you have provided support to ``CANA`` and a support acknowledgment does not a
 - [CAPES Foundation](https://www.gov.br/capes/pt-br), Ministry of Education of Brazil, Brasília, Brazil; Rion B. Correia.
 
 
-Development
------------
-Pull requests are welcome :) Please get in touch with one us beforehand: `rionbr(at)gmail(dot)com` or `ajgates42(at)gmail(dot)com`.
-
-** TODOs**
-
-- Parallelize control methods;
-- Parallelize canalization methods;
-- Generating ensembles of dynamics from structural motifs;
-- Expand on easy-to-replicate tutorials;
-
-Tests
------
-
-Run nosetests -v to perform tests and diagnoses on functions.
-
-
 Changelog
 ---------
+
+Master
+- Added visualization routines to drawing (effective graph and conditional effective graph)
+
+v1.0.1
+- Add Python 3.13 support (schematodes 1.0.1, PyO3 0.22)
+
+v1.0.0
+- A.M. Marcus, J.C. Rozum, H. Sizek, L.M. Rocha [2025]. "[CANA v1.0.0: efficient quantification of canalization in automata networks](https://doi.org/10.1093/bioinformatics/btaf461)". *Bioinformatics*. btaf461. doi: 10.1093/bioinformatics/btaf461
 
 v0.1
 - Canalization methods ported to Cython
